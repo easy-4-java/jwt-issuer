@@ -16,10 +16,7 @@
 package com.github.hiwepy.jwt.token;
 
 import java.text.ParseException;
-import java.util.Base64;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 import javax.crypto.SecretKey;
 
@@ -58,7 +55,7 @@ import com.nimbusds.jwt.SignedJWT;
 public class SignedWithHamcAndEncryptedWithAESJWTRepository implements JwtKeyPairRepository<String, SecretKey> {
 
 	private JwtTimeProvider timeProvider = JwtTimeProvider.DEFAULT_TIME_PROVIDER;
-	
+
 	/**
 	 * Issue JSON Web Token (JWT)
 	 * @author ：<a href="https://github.com/hiwepy">hiwepy</a>
@@ -79,17 +76,17 @@ public class SignedWithHamcAndEncryptedWithAESJWTRepository implements JwtKeyPai
 	 * @throws JwtException When Authentication Exception
 	 */
 	@Override
-	public String issueJwt(String signingKey, SecretKey secretKey, String jwtId, String subject, String issuer, String audience,
+	public String issueJwt(String signingKey, SecretKey secretKey, String jwtId, String subject, String issuer, Set<String> audience,
 			String roles, String permissions, String algorithm, long period)  throws JwtException {
 
 		Map<String, Object> claims =  new HashMap<String, Object>();
 		claims.put("roles", roles);
 		claims.put("perms", permissions);
-		
+
 		return this.issueJwt(signingKey, secretKey, jwtId, subject, issuer, audience, claims, algorithm, period);
-		
+
 	}
-	
+
 	/**
 	 * Issue JSON Web Token (JWT)
 	 * @author ：<a href="https://github.com/hiwepy">hiwepy</a>
@@ -109,12 +106,12 @@ public class SignedWithHamcAndEncryptedWithAESJWTRepository implements JwtKeyPai
 	 * @throws JwtException When Authentication Exception
 	 */
 	@Override
-	public String issueJwt(String signingKey, SecretKey secretKey, String jwtId, String subject, String issuer, String audience,
+	public String issueJwt(String signingKey, SecretKey secretKey, String jwtId, String subject, String issuer, Set<String> audience,
 			Map<String, Object> claims, String algorithm, long period) throws JwtException {
 		try {
-			
+
 			//-------------------- Step 1：Get ClaimsSet --------------------
-			
+
 			// Prepare JWT with claims set
 			JWTClaimsSet.Builder builder = NimbusdsUtils.claimsSet(jwtId, subject, issuer, audience, claims, period);
 			// 签发时间
@@ -130,34 +127,34 @@ public class SignedWithHamcAndEncryptedWithAESJWTRepository implements JwtKeyPai
 				builder.expirationTime(expiration);
 			}
 			JWTClaimsSet claimsSet = builder.build();
-			
+
 			//-------------------- Step 2：Hamc Signature --------------------
-			
+
 			// Request JWS Header with HMAC JWSAlgorithm
 			JWSHeader jwsHeader = new JWSHeader(JWSAlgorithm.parse(algorithm));
 			SignedJWT signedJWT = new SignedJWT(jwsHeader, claimsSet);
-			
+
 			// Create HMAC signer
 			byte[] secret = Base64.getDecoder().decode(signingKey);
 			JWSSigner signer = new MACSigner(secret);
-			
+
 			// Compute the HMAC signature
 			signedJWT.sign(signer);
-			
+
 			//-------------------- Step 3：RSA Encrypt ----------------------
-			
+
 			// Request JWT encrypted with DIR and 128-bit AES/GCM
 			JWEHeader jweHeader = new JWEHeader(JWEAlgorithm.DIR, EncryptionMethod.A128GCM);
-			
+
 			// Create JWE object with signed JWT as payload
 			JWEObject jweObject = new JWEObject( jweHeader, new Payload(signedJWT));
-			
+
 			// Create an encrypter with the specified public AES key
 			JWEEncrypter encrypter = new DirectEncrypter(secretKey);
-						
+
 			// Do the actual encryption
 			jweObject.encrypt(encrypter);
-			
+
 			// Serialise to JWE compact form
 			return jweObject.serialize();
 		} catch (IllegalStateException e) {
@@ -172,12 +169,12 @@ public class SignedWithHamcAndEncryptedWithAESJWTRepository implements JwtKeyPai
 	/**
 	 * Verify the validity of JWT
 	 * @author 				: <a href="https://github.com/hiwepy">hiwepy</a>
-	 * @param signingKey 	: 
+	 * @param signingKey 	:
 	 * <p>If the jws was signed with a SecretKey, the same SecretKey should be specified on the JwtParser. </p>
 	 * <p>If the jws was signed with a PrivateKey, that key's corresponding PublicKey (not the PrivateKey) should be specified on the JwtParser.</p>
-	 * @param secretKey 	: 
+	 * @param secretKey 	:
 	 * <p>If the jws was encrypted with a SecretKey, the same SecretKey should be specified on the JwtParser. </p>
-	 * <p>If the jws was encrypted with a PrivateKey, that key's corresponding PublicKey (not the PrivateKey) should be specified on the JwtParser.</p> 
+	 * <p>If the jws was encrypted with a PrivateKey, that key's corresponding PublicKey (not the PrivateKey) should be specified on the JwtParser.</p>
 	 * @param token  		: JSON Web Token (JWT)
 	 * @param checkExpiry 	: If Check validity.
 	 * @return If Validity
@@ -187,24 +184,24 @@ public class SignedWithHamcAndEncryptedWithAESJWTRepository implements JwtKeyPai
 	public boolean verify(String signingKey, SecretKey secretKey, String token, boolean checkExpiry) throws JwtException {
 
 		try {
-			
+
 			//-------------------- Step 1：AES Decrypt ----------------------
-			
+
 			// Parse the JWE string
 			JWEObject jweObject = JWEObject.parse(token);
-			
+
 			// Decrypt with AES key
 			jweObject.decrypt(new DirectDecrypter(secretKey));
-			
+
 			// Extract payload
 			SignedJWT signedJWT = jweObject.getPayload().toSignedJWT();
-			
+
 			//-------------------- Step 2：Hamc Verify --------------------
-			
+
 			// Create HMAC verifier
 			byte[] secret = Base64.getDecoder().decode(signingKey);
 			JWSVerifier verifier = checkExpiry ? new ExtendedMACVerifier(secret, signedJWT.getJWTClaimsSet(), this.getTimeProvider()) : new MACVerifier(secret) ;
-			
+
 			// Retrieve / verify the JWT claims according to the app requirements
 			return signedJWT.verify(verifier);
 		} catch (IllegalStateException e) {
@@ -216,16 +213,16 @@ public class SignedWithHamcAndEncryptedWithAESJWTRepository implements JwtKeyPai
 		} catch (JOSEException e) {
 			throw new InvalidJwtToken(e);
 		}
-		
+
 	}
-	
+
 	/**
 	 * Parser JSON Web Token (JWT)
 	 * @author 		：<a href="https://github.com/hiwepy">hiwepy</a>
-	 * @param signingKey 	: 
+	 * @param signingKey 	:
 	 * <p>If the jws was signed with a SecretKey, the same SecretKey should be specified on the JwtParser. </p>
 	 * <p>If the jws was signed with a PrivateKey, that key's corresponding PublicKey (not the PrivateKey) should be specified on the JwtParser.</p>
-	 * @param secretKey 	: 
+	 * @param secretKey 	:
 	 * <p>If the jws was encrypted with a SecretKey, the same SecretKey should be specified on the JwtParser. </p>
 	 * <p>If the jws was encrypted with a PrivateKey, that key's corresponding PublicKey (not the PrivateKey) should be specified on the JwtParser.</p>
 	 * @param token  		: JSON Web Token (JWT)
@@ -236,31 +233,31 @@ public class SignedWithHamcAndEncryptedWithAESJWTRepository implements JwtKeyPai
 	@Override
 	public JwtPayload getPlayload(String signingKey, SecretKey secretKey, String token, boolean checkExpiry)  throws JwtException {
 		try {
-			
+
 			//-------------------- Step 1：AES Decrypt ----------------------
-			
+
 			// Parse the JWE string
 			JWEObject jweObject = JWEObject.parse(token);
-			
+
 			// Decrypt with AES key
 			jweObject.decrypt(new DirectDecrypter(secretKey));
-			
+
 			// Extract payload
 			SignedJWT signedJWT = jweObject.getPayload().toSignedJWT();
-			
+
 			//-------------------- Step 2：Hamc Verify --------------------
-			
+
 			// Create HMAC verifier
 			byte[] secret = Base64.getDecoder().decode(signingKey);
 			JWSVerifier verifier = checkExpiry ? new ExtendedMACVerifier(secret, signedJWT.getJWTClaimsSet(), this.getTimeProvider()) : new MACVerifier(secret) ;
-						
+
 			// Retrieve / verify the JWT claims according to the app requirements
 			if(!signedJWT.verify(verifier)) {
 				throw new JwtException(String.format("Invalid JSON Web Token (JWT) : %s", token));
 			}
-			
+
 			//-------------------- Step 3：Gets The Claims ---------------
-			
+
 			// Retrieve JWT claims
 			return NimbusdsUtils.payload(signedJWT.getJWTClaimsSet());
 		} catch (IllegalStateException e) {
@@ -272,9 +269,9 @@ public class SignedWithHamcAndEncryptedWithAESJWTRepository implements JwtKeyPai
 		} catch (JOSEException e) {
 			throw new InvalidJwtToken(e);
 		}
-		
+
 	}
- 
+
 	public JwtTimeProvider getTimeProvider() {
 		return timeProvider;
 	}
@@ -282,5 +279,5 @@ public class SignedWithHamcAndEncryptedWithAESJWTRepository implements JwtKeyPai
 	public void setTimeProvider(JwtTimeProvider timeProvider) {
 		this.timeProvider = timeProvider;
 	}
-	
+
 }

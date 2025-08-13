@@ -11,19 +11,12 @@
 	<artifactId>jwt-issuer-with-jjwt</artifactId>
 
 	<dependencies>
-		<!-- Java Servlet API -->
+
 		<dependency>
-			<groupId>javax.servlet</groupId>
-			<artifactId>javax.servlet-api</artifactId>
-			<scope>provided</scope>
-		</dependency>
-		
-		<dependency>
-			<groupId>${project.groupId}</groupId>
+			<groupId>com.github.hiwepy</groupId>
 			<artifactId>jwt-issuer-api</artifactId>
 			<version>${project.version}</version>
 		</dependency>
-		
 		<dependency>
 		    <groupId>io.jsonwebtoken</groupId>
 		    <artifactId>jjwt-api</artifactId>
@@ -36,7 +29,7 @@
 		    <groupId>io.jsonwebtoken</groupId>
 		    <artifactId>jjwt-jackson</artifactId>
 		</dependency>
-		<!-- Uncomment this next dependency if you are using JDK 10 or earlier and you also want to use 
+		<!-- Uncomment this next dependency if you are using JDK 10 or earlier and you also want to use
 		     RSASSA-PSS (PS256, PS384, PS512) algorithms.  JDK 11 or later does not require it for those algorithms:
 		<dependency>
 		    <groupId>org.bouncycastle</groupId>

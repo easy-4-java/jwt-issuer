@@ -26,14 +26,15 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import com.alibaba.fastjson2.JSONArray;
 import org.apache.commons.collections4.MapUtils;
 
-import com.alibaba.fastjson.JSONObject;
+import com.alibaba.fastjson2.JSONObject;
 import com.github.hiwepy.jwt.utils.StringUtils;
 
 /**
  * TODO
- * 
+ *
  * @author ： <a href="https://github.com/hiwepy">hiwepy</a>
  */
 @SuppressWarnings("unchecked")
@@ -70,7 +71,7 @@ public class JwtPayload {
 	/**
 	 * 接收方(JWT令牌此项有值)
 	 */
-	private List<String> audience;
+	private Set<String> audience;
 	/**
 	 * 访问主张(JWT令牌此项有值)
 	 */
@@ -115,6 +116,10 @@ public class JwtPayload {
 	 * 用户是否完善信息
 	 */
 	private boolean initial = Boolean.FALSE;
+	/**
+	 * 用户是否需要多因子验证
+	 */
+	private boolean verify = Boolean.FALSE;
 
 	/**
 	 * 兼容 Spring Security
@@ -180,11 +185,11 @@ public class JwtPayload {
 		this.notBefore = notBefore;
 	}
 
-	public List<String> getAudience() {
+	public Set<String> getAudience() {
 		return audience;
 	}
 
-	public void setAudience(List<String> audience) {
+	public void setAudience(Set<String> audience) {
 		this.audience = audience;
 	}
 
@@ -259,9 +264,9 @@ public class JwtPayload {
 	public void setRcode(String rcode) {
 		this.rcode = rcode;
 	}
-	
+
 	public boolean isBound() {
-		return MapUtils.getBoolean(claims, JwtClaims.BOUND, bound); 
+		return MapUtils.getBoolean(claims, JwtClaims.BOUND, bound);
 	}
 
 	public void setBound(boolean bound) {
@@ -276,11 +281,19 @@ public class JwtPayload {
 		this.initial = initial;
 	}
 
+	public void setVerify(boolean verify) {
+		this.verify = verify;
+	}
+
+	public boolean isVerify() {
+		return MapUtils.getBoolean(claims, JwtClaims.VERIFY, verify);
+	}
+
 	public List<RolePair> getRoles() {
 		Object obj = MapUtils.getObject(claims, JwtClaims.ROLES);
 		if (obj != null) {
 			if (obj instanceof String) {
-				return JSONObject.parseArray(String.valueOf(obj), RolePair.class);
+				return JSONArray.parseArray(String.valueOf(obj), RolePair.class);
 			}
 			return (List<RolePair>) obj;
 		}
@@ -347,8 +360,21 @@ public class JwtPayload {
 	@SuppressWarnings("serial")
 	public static class RolePair implements Serializable {
 
+		/**
+		 * 角色Id
+		 */
 		private String id;
+		/**
+		 * 角色唯一编码
+		 */
 		private String key;
+		/**
+		 * 角色是否需要多因子验证
+		 */
+		private boolean verify = Boolean.FALSE;
+		/**
+		 * 角色名称
+		 */
 		private String value;
 
 		public RolePair() {
@@ -360,6 +386,14 @@ public class JwtPayload {
 			this.id = id;
 			this.key = key;
 			this.value = value;
+		}
+
+		public RolePair(String id, String key, String value, boolean verify) {
+			super();
+			this.id = id;
+			this.key = key;
+			this.value = value;
+			this.verify = verify;
 		}
 
 		public String getId() {
@@ -384,6 +418,14 @@ public class JwtPayload {
 
 		public void setValue(String value) {
 			this.value = value;
+		}
+
+		public void setVerify(boolean verify) {
+			this.verify = verify;
+		}
+
+		public boolean isVerify() {
+			return verify;
 		}
 
 	}

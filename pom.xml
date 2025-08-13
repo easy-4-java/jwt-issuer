@@ -8,17 +8,17 @@
 	<name>${project.groupId}:${project.artifactId}</name>
 	<url>https://github.com/hiwepy/${project.artifactId}</url>
 	<packaging>pom</packaging>
-	
+
 	<modules>
 		<module>jwt-issuer-api</module>
 		<module>jwt-issuer-with-jjwt</module>
 		<module>jwt-issuer-with-nimbus</module>
 	</modules>
-	
+
 	<licenses>
 		<license>
 			<name>The Apache Software License, Version 2.0</name>
-			<url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+			<url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
 		</license>
 	</licenses>
 
@@ -62,7 +62,6 @@
 					<artifactId>maven-compiler-plugin</artifactId>
 					<version>${maven-compiler-plugin.version}</version>
 					<configuration>
-						<defaultLibBundleDir>lib</defaultLibBundleDir>
 						<source>${java.version}</source>
 						<target>${java.version}</target>
 						<encoding>${project.build.sourceEncoding}</encoding>
@@ -155,9 +154,7 @@
 					<artifactId>maven-source-plugin</artifactId>
 					<version>${maven-source-plugin.version}</version>
 					<configuration>
-						<testFailureIgnore>true</testFailureIgnore>
 						<attach>true</attach>
-						<encoding>${project.build.sourceEncoding}</encoding>
 					</configuration>
 					<executions>
 						<execution>
@@ -172,17 +169,16 @@
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-surefire-plugin</artifactId>
-					<version>${maven-surefire-plugin.vertsion}</version>
+					<version>${maven-surefire-plugin.version}</version>
 					<configuration>
 						<!-- 跳过单元测试 -->
 						<skip>true</skip>
 						<skipTests>true</skipTests>
-						<!-- forkMode 可设置值有 “never”， “once”， “always” 和 “pertest”。 pretest： 
-							每一个测试创建一个新进程，为每个测试创建新的JVM是单独测试的最彻底方式，但也是最慢的，不适合hudson上持续回归。 once：在一个进程中进行所有测试。once为默认设置，在Hudson上持续回归时建议使用默认设置。 
+						<!-- forkMode 可设置值有 “never”， “once”， “always” 和 “pertest”。 pretest：
+							每一个测试创建一个新进程，为每个测试创建新的JVM是单独测试的最彻底方式，但也是最慢的，不适合hudson上持续回归。 once：在一个进程中进行所有测试。once为默认设置，在Hudson上持续回归时建议使用默认设置。
 							always：在一个进程中并行的运行脚本，Junit4.7以上版本才可以使用，surefire的版本要在2.6以上提供这个功能，其中 threadCount：执行时，指定可分配的线程数量。只和参数parallel配合使用有效。默认：5。 -->
-						<forkMode>once</forkMode>
-						<argLine>-Xmx1024m -XX:PermSize=256m -XX:MaxPermSize=256m
-							-Dfile.encoding=UTF-8</argLine>
+						<!--<forkMode>once</forkMode>-->
+						<argLine>-Xmx1024m -XX:PermSize=256m -XX:MaxPermSize=256m -Dfile.encoding=UTF-8</argLine>
 						<additionalClasspathElements>
 							<additionalClasspathElement>${basedir}/target/test-classes</additionalClasspathElement>
 						</additionalClasspathElements>
@@ -200,7 +196,6 @@
 					<artifactId>maven-jar-plugin</artifactId>
 					<version>${maven-jar-plugin.version}</version>
 					<configuration>
-						<encoding>${project.build.sourceEncoding}</encoding>
 						<skipIfEmpty>true</skipIfEmpty>
 						<archive>
 							<manifest>
@@ -216,8 +211,6 @@
 					<artifactId>maven-javadoc-plugin</artifactId>
 					<version>${maven-javadoc-plugin.version}</version>
 					<configuration>
-						<aggregate>true</aggregate>
-						<argLine>-Dfile.encoding=UTF-8</argLine>
 						<charset>${project.build.sourceEncoding}</charset>
 						<encoding>${project.build.sourceEncoding}</encoding>
 						<docencoding>${project.build.sourceEncoding}</docencoding>
@@ -240,7 +233,7 @@
 					<configuration>
 						<serverId>ossrh</serverId>
 						<nexusUrl>https://oss.sonatype.org/</nexusUrl>
-						<autoReleaseAfterClose>false</autoReleaseAfterClose>
+						<autoReleaseAfterClose>true</autoReleaseAfterClose>
 						<!-- <sslAllowAll>true</sslAllowAll> -->
 						<stagingProgressPauseDurationSeconds>120</stagingProgressPauseDurationSeconds>
 						<stagingProgressTimeoutMinutes>30</stagingProgressTimeoutMinutes>
@@ -373,46 +366,60 @@
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<commons-codec.version>1.11</commons-codec.version>
-		<commons-lang3.version>3.5</commons-lang3.version>
-		<commons-io.version>2.6</commons-io.version>
-		<commons-collections4.version>4.4</commons-collections4.version>
-		<fastjson.version>1.2.75</fastjson.version>
-		<guava.version>30.0-jre</guava.version>
-		<junit.version>4.12</junit.version>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 		<java.version>1.8</java.version>
-		<jjwt.version>0.11.2</jjwt.version>
-		<maven-antrun-plugin.version>1.8</maven-antrun-plugin.version>
-		<maven-assembly-plugin.version>3.1.1</maven-assembly-plugin.version>
-		<maven-clean-plugin.version>3.1.0</maven-clean-plugin.version>
-		<maven-compiler-plugin.version>3.8.0</maven-compiler-plugin.version>
-		<maven-dependency-plugin.version>3.1.1</maven-dependency-plugin.version>
-		<maven-deploy-plugin.version>2.8.2</maven-deploy-plugin.version>
-		<maven-enforcer-plugin.version>3.0.0-M2</maven-enforcer-plugin.version>
-		<maven-gpg-plugin.version>1.6</maven-gpg-plugin.version>
-		<maven-install-plugin.version>3.0.0-M1</maven-install-plugin.version>
-		<maven-jar-plugin.version>3.1.0</maven-jar-plugin.version>
-		<maven-javadoc-plugin.version>3.0.1</maven-javadoc-plugin.version>
-		<maven-release-plugin.version>2.5.3</maven-release-plugin.version>
-		<maven-resources-plugin.version>3.1.0</maven-resources-plugin.version>
-		<maven-surefire-plugin.vertsion>2.22.1</maven-surefire-plugin.vertsion>
-		<maven-source-plugin.version>3.0.1</maven-source-plugin.version>
-		<maven-nexus-staging-plugin.version>1.6.8</maven-nexus-staging-plugin.version>
-		<maven-nexus-yuicompressor-plugin.version>1.1.0</maven-nexus-yuicompressor-plugin.version>
-		<maven-war-plugin.version>3.2.2</maven-war-plugin.version>
-		<nimbus-jose-jwt.version>9.7</nimbus-jose-jwt.version>
-		<servlet-api.version>3.0.1</servlet-api.version>
-		<slf4j.version>1.7.26</slf4j.version>
+		<!-- Maven Plugin versions -->
+		<maven.version>3.6.3</maven.version>
+		<maven.compiler.source>${java.version}</maven.compiler.source>
+		<maven.compiler.target>${java.version}</maven.compiler.target>
+		<maven-antrun-plugin.version>3.1.0</maven-antrun-plugin.version>
+		<maven-clean-plugin.version>3.4.0</maven-clean-plugin.version>
+		<maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
+		<maven-dependency-plugin.version>3.8.0</maven-dependency-plugin.version>
+		<maven-deploy-plugin.version>3.1.3</maven-deploy-plugin.version>
+		<maven-enforcer-plugin.version>3.5.0</maven-enforcer-plugin.version>
+		<maven-gpg-plugin.version>3.2.6</maven-gpg-plugin.version>
+		<maven-failsafe-plugin.version>3.0.0</maven-failsafe-plugin.version>
+		<maven-help-plugin.version>3.5.0</maven-help-plugin.version>
+		<maven-install-plugin.version>3.1.3</maven-install-plugin.version>
+		<maven-invoker-plugin.version>3.8.0</maven-invoker-plugin.version>
+		<maven-jar-plugin.version>3.4.2</maven-jar-plugin.version>
+		<maven-javadoc-plugin.version>3.8.0</maven-javadoc-plugin.version>
+		<maven-nexus-staging-plugin.version>1.7.0</maven-nexus-staging-plugin.version>
+		<maven-release-plugin.version>3.1.1</maven-release-plugin.version>
+		<maven-resources-plugin.version>3.3.1</maven-resources-plugin.version>
+		<maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
+		<maven-source-plugin.version>3.3.1</maven-source-plugin.version>
+		<maven-surefire-plugin.version>3.5.0</maven-surefire-plugin.version>
+		<maven-war-plugin.version>3.4.0</maven-war-plugin.version>
+		<!-- Dependency versions -->
+		<commons-codec.version>1.17.1</commons-codec.version>
+		<commons-io.version>2.20.0</commons-io.version>
+		<commons-lang3.version>3.18.0</commons-lang3.version>
+		<commons-collections4.version>4.5.0</commons-collections4.version>
+		<fastjson2.version>2.0.53</fastjson2.version>
+		<guava.version>33.2.1-jre</guava.version>
+		<jjwt.version>0.12.6</jjwt.version>
+		<junit5.version>5.8.2</junit5.version>
+		<nimbus-jose-jwt.version>9.41.2</nimbus-jose-jwt.version>
+		<slf4j.version>2.0.16</slf4j.version>
 	</properties>
-	
+
 	<dependencyManagement>
 		<dependencies>
-			
-			<!-- https://mvnrepository.com/artifact/junit/junit -->
+
+			<!-- https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-api -->
 			<dependency>
-				<groupId>junit</groupId>
-				<artifactId>junit</artifactId>
-				<version>${junit.version}</version>
+				<groupId>org.junit.jupiter</groupId>
+				<artifactId>junit-jupiter-api</artifactId>
+				<version>${junit5.version}</version>
+				<scope>test</scope>
+			</dependency>
+			<!-- https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-engine -->
+			<dependency>
+				<groupId>org.junit.jupiter</groupId>
+				<artifactId>junit-jupiter-engine</artifactId>
+				<version>${junit5.version}</version>
 				<scope>test</scope>
 			</dependency>
 
@@ -428,13 +435,7 @@
 				<version>${slf4j.version}</version>
 				<scope>test</scope>
 			</dependency>
-			 
-			<dependency>
-				<groupId>javax.servlet</groupId>
-				<artifactId>javax.servlet-api</artifactId>
-				<version>${servlet-api.version}</version>
-			</dependency>
-			
+
 			<dependency>
 			    <groupId>commons-codec</groupId>
 			    <artifactId>commons-codec</artifactId>
@@ -445,18 +446,18 @@
 				<artifactId>commons-lang3</artifactId>
 				<version>${commons-lang3.version}</version>
 			</dependency>
-			<!-- The Apache Commons Collections package contains types that extend 
+			<!-- The Apache Commons Collections package contains types that extend
 				and augment the Java Collections Framework. -->
 			<dependency>
 				<groupId>org.apache.commons</groupId>
 				<artifactId>commons-collections4</artifactId>
 				<version>${commons-collections4.version}</version>
 			</dependency>
-			<!-- https://mvnrepository.com/artifact/com.alibaba/fastjson -->
+			<!-- https://mvnrepository.com/artifact/com.alibaba.fastjson2/fastjson2 -->
 			<dependency>
-			    <groupId>com.alibaba</groupId>
-			    <artifactId>fastjson</artifactId>
-			    <version>${fastjson.version}</version>
+				<groupId>com.alibaba.fastjson2</groupId>
+				<artifactId>fastjson2</artifactId>
+				<version>${fastjson2.version}</version>
 			</dependency>
 			<!-- https://mvnrepository.com/artifact/com.nimbusds/nimbus-jose-jwt -->
 			<dependency>
@@ -464,7 +465,7 @@
 			    <artifactId>nimbus-jose-jwt</artifactId>
 			    <version>${nimbus-jose-jwt.version}</version>
 			</dependency>
-			
+
 			<!-- https://mvnrepository.com/artifact/io.jsonwebtoken/jjwt-jackson -->
 			<dependency>
 			    <groupId>io.jsonwebtoken</groupId>
@@ -489,23 +490,29 @@
 			    <artifactId>jjwt-orgjson</artifactId>
 			    <version>${jjwt.version}</version>
 			</dependency>
-			
+
 			<!-- https://mvnrepository.com/artifact/com.google.guava/guava -->
 			<dependency>
 			    <groupId>com.google.guava</groupId>
 			    <artifactId>guava</artifactId>
 			    <version>${guava.version}</version>
 			</dependency>
-			
+
 		</dependencies>
 	</dependencyManagement>
-	
+
 	<dependencies>
 
-		<!-- https://mvnrepository.com/artifact/junit/junit -->
+		<!-- https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-api -->
 		<dependency>
-			<groupId>junit</groupId>
-			<artifactId>junit</artifactId>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-api</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<!-- https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-engine -->
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-engine</artifactId>
 			<scope>test</scope>
 		</dependency>
 		<!-- https://mvnrepository.com/artifact/org.slf4j -->
@@ -520,5 +527,5 @@
 		</dependency>
 
 	</dependencies>
-	
+
 </project>

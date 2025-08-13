@@ -15,16 +15,13 @@
  */
 package com.github.hiwepy.jwt.utils;
 
-import java.text.ParseException;
-import java.util.Date;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
 import com.github.hiwepy.jwt.JwtPayload;
 import com.nimbusds.jwt.JWTClaimsSet;
+import org.apache.commons.collections4.CollectionUtils;
+
+import java.text.ParseException;
+import java.util.*;
+import java.util.Map.Entry;
 
 /**
  * 基于Nimbusds组件的jwt工具对象
@@ -32,9 +29,9 @@ import com.nimbusds.jwt.JWTClaimsSet;
  */
 public class NimbusdsUtils {
 
-	public static JWTClaimsSet.Builder claimsSet(String jwtId, String subject, String issuer, String audience, Map<String, Object> claims,
-			long period) {
-		
+	public static JWTClaimsSet.Builder claimsSet(String jwtId, String subject, String issuer, Set<String> audience, Map<String, Object> claims,
+												 long period) {
+
 		// Current TimeMillis
 		long currentTimeMillis = System.currentTimeMillis();
 
@@ -48,8 +45,8 @@ public class NimbusdsUtils {
 		// 用户名主题
 		builder.subject(subject);
 		// 接收对象
-		if (StringUtils.isNoneBlank(audience)) {
-			builder.audience(Stream.of(StringUtils.tokenizeToStringArray(audience)).collect(Collectors.toList()));
+		if (CollectionUtils.isNotEmpty(audience)) {
+			builder.audience(new ArrayList<>(audience));
 		}
 		// 签发者
 		if (StringUtils.isNoneBlank(issuer)) {
@@ -76,9 +73,9 @@ public class NimbusdsUtils {
 		}
 		return builder;
 	}
-	
-	
-	public static JWTClaimsSet.Builder claimsSet(String jwtId, String subject, String issuer, String audience, String roles,
+
+
+	public static JWTClaimsSet.Builder claimsSet(String jwtId, String subject, String issuer, Set<String> audience, String roles,
 			String permissions, long period) {
 
 		// Current TimeMillis
@@ -94,8 +91,8 @@ public class NimbusdsUtils {
 		// 用户名主题
 		builder.subject(subject);
 		// 接收对象
-		if (StringUtils.isNoneBlank(audience)) {
-			builder.audience(Stream.of(StringUtils.tokenizeToStringArray(audience)).collect(Collectors.toList()));
+		if (CollectionUtils.isNotEmpty(audience)) {
+			builder.audience(new ArrayList<>(audience));
 		}
 		// 签发者
 		if (StringUtils.isNoneBlank(issuer)) {
@@ -132,9 +129,9 @@ public class NimbusdsUtils {
 		payload.setIssuedAt(jwtClaims.getIssueTime());// 签发时间
 		payload.setExpiration(jwtClaims.getExpirationTime()); // 过期时间
 		payload.setNotBefore(jwtClaims.getNotBeforeTime());
-		payload.setAudience(jwtClaims.getAudience());// 接收方
+		payload.setAudience(new HashSet<>(jwtClaims.getAudience()));// 接收方
 		payload.setClaims(jwtClaims.getClaims()); // 访问主张
-		
+
 		return payload;
 	}
 

@@ -15,29 +15,19 @@
  */
 package com.github.hiwepy.jwt.utils;
 
-import java.security.Key;
-import java.text.ParseException;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Map.Entry;
-
+import com.github.hiwepy.jwt.JwtPayload;
+import io.jsonwebtoken.*;
+import io.jsonwebtoken.lang.Classes;
 import org.apache.commons.lang3.StringUtils;
 
-import com.github.hiwepy.jwt.JwtPayload;
-
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.CompressionCodecs;
-import io.jsonwebtoken.JwtBuilder;
-import io.jsonwebtoken.JwtParserBuilder;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.lang.Classes;
+import java.security.Key;
+import java.text.ParseException;
+import java.util.*;
+import java.util.Map.Entry;
 
 /**
  * 基于JJwt组件的jwt工具对象
- * 
+ *
  * @author ： <a href="https://github.com/hiwepy">hiwepy</a>
  */
 public class JJwtUtils {
@@ -57,8 +47,8 @@ public class JJwtUtils {
     public static JwtParserBuilder parserBuilder() {
         return Classes.newInstance("io.jsonwebtoken.impl.NoExpirationJwtParserBuilder");
     }
-    
-	public static JwtBuilder jwtBuilder(String jwtId, String subject, String issuer, String audience, Map<String, Object> claims,
+
+	public static JwtBuilder jwtBuilder(String jwtId, String subject, String issuer, Set<String> audience, Map<String, Object> claims,
 			long period) {
 
 		// 当前时间戳
@@ -77,8 +67,8 @@ public class JJwtUtils {
 		builder.setSubject(subject);
 		builder.claim(Claims.SUBJECT, subject);
 		// 接收对象
-		if (StringUtils.isNoneBlank(audience)) {
-			builder.setAudience(audience);
+		if (Objects.nonNull(audience)) {
+			builder.audience().add(audience);
 			builder.claim(Claims.AUDIENCE, audience);
 		}
 		// 签发者
@@ -97,15 +87,15 @@ public class JJwtUtils {
 			Date expiration = new Date(currentTimeMillis + period);
 			builder.setExpiration(expiration);
 		}
-		
+
 		return builder;
 	}
 
 	public static JwtBuilder jwtBuilder(String jwtId, String subject,
-			String issuer, String audience, String roles, String permissions, long period) {
-		
+			String issuer, Set<String> audience, String roles, String permissions, long period) {
+
 		JwtBuilder builder = Jwts.builder().setHeaderParam("typ", "JWT");
-		
+
 		// Jwt主键ID
 		if (StringUtils.isNoneBlank(jwtId)) {
 			builder.setId(jwtId);
@@ -115,15 +105,15 @@ public class JJwtUtils {
 		builder.setSubject(subject);
 		builder.claim(Claims.SUBJECT, subject);
 		// 接收对象
-		if (StringUtils.isNoneBlank(audience)) {
-			builder.setAudience(audience);
+		if (Objects.nonNull(audience)) {
+			builder.audience().add(audience);
 			builder.claim(Claims.AUDIENCE, audience);
 		}
 		// 签发者
 		if (StringUtils.isNoneBlank(issuer)) {
 			builder.setIssuer(issuer);
 			builder.claim(Claims.ISSUER, issuer);
-		} 
+		}
 		// 角色
 		if (StringUtils.isNoneBlank(roles)) {
 			builder.claim("roles", roles);
@@ -138,28 +128,28 @@ public class JJwtUtils {
 	public static JwtPayload payload(Claims claims) throws ParseException {
 
 		JwtPayload payload = new JwtPayload();
-		
+
 		payload.setTokenId(claims.getId());
 		payload.setSubject(claims.getSubject());// 用户名
 		payload.setIssuer(claims.getIssuer());// 签发者
 		payload.setIssuedAt(claims.getIssuedAt());// 签发时间
 		payload.setExpiration(claims.getExpiration()); // 过期时间
 		payload.setNotBefore(claims.getNotBefore());
-		
-		payload.setAudience(Arrays.asList(claims.getAudience()));// 接收方
+
+		payload.setAudience(claims.getAudience());// 接收方
 		payload.setClaims(claims); // 访问主张
-		
+
 		return payload;
 	}
 
 	public static Claims parseJWT(Key secretKey, String token) {
 		// 解析jwt串 :其中parseClaimsJws验证jwt字符串失败可能会抛出异常，需要捕获异常
-		Claims claims = Jwts.parserBuilder().setSigningKey(secretKey).build().parseClaimsJws(token).getBody();
+		Claims claims = Jwts.parser().setSigningKey(secretKey).build().parseClaimsJws(token).getBody();
 		return claims;
 	}
 
 	public String genAccessToken(Key secretKey, String uid, String subject,
-			String issuer, String audience, Map<String, Object> claims, long access_token_expiration) {
+								 String issuer, Set<String> audience, Map<String, Object> claims, long access_token_expiration) {
 		return jwtBuilder(uid, subject, issuer, audience, claims, access_token_expiration)
 				// 压缩，可选GZIP
 				.compressWith(CompressionCodecs.DEFLATE)
@@ -168,7 +158,7 @@ public class JJwtUtils {
 	}
 
 	public String genRefreshToken(Key secretKey, String uid, String subject,
-			String issuer, String audience, Map<String, Object> claims, long refresh_token_expiration) {
+			String issuer, Set<String> audience, Map<String, Object> claims, long refresh_token_expiration) {
 		return jwtBuilder(uid, subject, issuer, audience, claims, refresh_token_expiration)
 				// 压缩，可选GZIP
 				.compressWith(CompressionCodecs.DEFLATE)
@@ -181,8 +171,7 @@ public class JJwtUtils {
 		return !isCreatedBeforeLastPasswordReset(created, lastPasswordReset) && (!isTokenExpired(secretKey, token));
 	}
 
-	public String refreshToken(Key secretKey, String token,
-			long access_token_expiration) {
+	public String refreshToken(Key secretKey, String token, long access_token_expiration) {
 		String refreshedToken;
 		try {
 			final Claims claims = parseJWT(secretKey, token);

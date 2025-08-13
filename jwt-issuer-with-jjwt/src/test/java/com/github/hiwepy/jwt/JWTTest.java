@@ -18,14 +18,10 @@
  */
 package com.github.hiwepy.jwt;
 
-import java.util.Base64;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 import javax.crypto.SecretKey;
 
-import org.junit.Test;
 
 import com.github.hiwepy.jwt.utils.JJwtUtils;
 import com.github.hiwepy.jwt.utils.SecretKeyUtils;
@@ -34,6 +30,7 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.CompressionCodecs;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import org.junit.jupiter.api.Test;
 
 /**
  * TODO
@@ -57,9 +54,10 @@ public class JWTTest {
 		Map<String, Object> claims = new HashMap<String, Object>();
 		claims.put("roles", "admin,stu");
 		claims.put("perms", "user:del");
-
+		Set<String> audience = new LinkedHashSet<>();
+		audience.add("0001");
 		
-		String token1 = JJwtUtils.jwtBuilder(UUID.randomUUID().toString(), "Jwt测试1", "test1", "0001", claims, 1024)
+		String token1 = JJwtUtils.jwtBuilder(UUID.randomUUID().toString(), "Jwt测试1", "test1", audience, claims, 1024)
 				// 压缩，可选GZIP
 				.compressWith(CompressionCodecs.DEFLATE)
 				// 设置算法（必须）
@@ -104,9 +102,10 @@ public class JWTTest {
 		// Key key = Keys.secretKeyFor(SignatureAlgorithm.HS256);
 		SecretKey secretKey = SecretKeyUtils.genSecretKey(base64Secret, "HmacSHA256");
 		System.out.println(Base64.getEncoder().encodeToString(secretKey.getEncoded()));
-		
+		Set<String> audience = new LinkedHashSet<>();
+		audience.add("0002");
 		String token2 = JJwtUtils
-				.jwtBuilder(UUID.randomUUID().toString(), "Jwt测试2", "test2", "0002", "admin,stu", "user:del", 1024)
+				.jwtBuilder(UUID.randomUUID().toString(), "Jwt测试2", "test2", audience, "admin,stu", "user:del", 1024)
 				// 压缩，可选GZIP
 				.compressWith(CompressionCodecs.DEFLATE)
 				// 设置算法（必须）

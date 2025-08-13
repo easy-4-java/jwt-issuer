@@ -85,6 +85,10 @@ public class JwtClaims {
    	 */
 	public static final String INITIAL = "initial";
 	/**
+	 * 用户是否需要多因子验证
+	 */
+	public static final String VERIFY = "verify";
+	/**
 	 * 用户最新位置经度
 	 */
 	public static final String LONGITUDE = "longitude"; 

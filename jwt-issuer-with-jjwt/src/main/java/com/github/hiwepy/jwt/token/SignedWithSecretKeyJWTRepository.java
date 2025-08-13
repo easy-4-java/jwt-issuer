@@ -15,43 +15,24 @@
  */
 package com.github.hiwepy.jwt.token;
 
+import com.github.hiwepy.jwt.JwtPayload;
+import com.github.hiwepy.jwt.exception.ExpiredJwtException;
+import com.github.hiwepy.jwt.exception.JwtException;
+import com.github.hiwepy.jwt.exception.*;
+import com.github.hiwepy.jwt.utils.JJwtUtils;
+import io.jsonwebtoken.*;
+import io.jsonwebtoken.security.InvalidKeyException;
+import io.jsonwebtoken.security.SignatureException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.security.Key;
 import java.text.ParseException;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.github.hiwepy.jwt.JwtPayload;
-import com.github.hiwepy.jwt.exception.ExpiredJwtException;
-import com.github.hiwepy.jwt.exception.IncorrectJwtException;
-import com.github.hiwepy.jwt.exception.InvalidJwtToken;
-import com.github.hiwepy.jwt.exception.JwtException;
-import com.github.hiwepy.jwt.exception.NotObtainedJwtException;
-import com.github.hiwepy.jwt.utils.JJwtUtils;
-
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Clock;
-import io.jsonwebtoken.CompressionCodec;
-import io.jsonwebtoken.CompressionCodecResolver;
-import io.jsonwebtoken.CompressionCodecs;
-import io.jsonwebtoken.InvalidClaimException;
-import io.jsonwebtoken.Jws;
-import io.jsonwebtoken.JwtBuilder;
-import io.jsonwebtoken.JwtClock;
-import io.jsonwebtoken.JwtParser;
-import io.jsonwebtoken.JwtParserBuilder;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.MalformedJwtException;
-import io.jsonwebtoken.MissingClaimException;
-import io.jsonwebtoken.PrematureJwtException;
-import io.jsonwebtoken.RequiredTypeException;
-import io.jsonwebtoken.SignatureAlgorithm;
-import io.jsonwebtoken.security.InvalidKeyException;
-import io.jsonwebtoken.security.SignatureException;
 
 /**
  * <b> JSON Web Token (JWT) with signature </b>
@@ -65,16 +46,16 @@ public class SignedWithSecretKeyJWTRepository implements JwtRepository<Key> {
     private CompressionCodecResolver compressionCodecResolver;
     private Clock clock = new JwtClock();
     private static final Map<String, JwtParser> PARSER_CONTEXT = new ConcurrentHashMap<>();
- 
+
 	public JwtParser getJwtParser(Key secretKey, boolean checkExpiry) {
-		
+
 		String key = String.format("%s-%s", secretKey.hashCode() , checkExpiry);
 		JwtParser ret = PARSER_CONTEXT.get(key);
 		if (ret != null) {
 			return ret;
 		}
-		
-		JwtParserBuilder jwtParserBuilder = checkExpiry ? Jwts.parserBuilder() : JJwtUtils.parserBuilder();
+
+		JwtParserBuilder jwtParserBuilder = checkExpiry ? Jwts.parser() : JJwtUtils.parserBuilder();
 		// 时钟
 		jwtParserBuilder.setClock(clock)
 		// 签名Key
@@ -89,7 +70,7 @@ public class SignedWithSecretKeyJWTRepository implements JwtRepository<Key> {
 		PARSER_CONTEXT.put( key, ret);
 		return ret;
 	}
-    
+
     /**
 	 * Issue JSON Web Token (JWT)
 	 * @author ：<a href="https://github.com/hiwepy">hiwepy</a>
@@ -119,13 +100,13 @@ public class SignedWithSecretKeyJWTRepository implements JwtRepository<Key> {
 	 * @throws JwtException When Authentication Exception
 	 */
 	@Override
-	public String issueJwt(Key secretKey, String jwtId, String subject, String issuer, String audience,
+	public String issueJwt(Key secretKey, String jwtId, String subject, String issuer, Set<String> audience,
 			String roles, String permissions, String algorithm, long period)  throws JwtException {
-		
+
 		Map<String, Object> claims = new HashMap<String, Object>();
 		claims.put("roles", roles);
 		claims.put("perms", permissions);
-		
+
 		return this.issueJwt(secretKey, jwtId, subject, issuer, audience, claims, algorithm, period);
 	}
 
@@ -157,9 +138,9 @@ public class SignedWithSecretKeyJWTRepository implements JwtRepository<Key> {
 	 * @throws JwtException When Authentication Exception
 	 */
 	@Override
-	public String issueJwt(Key secretKey, String jwtId, String subject, String issuer, String audience,
+	public String issueJwt(Key secretKey, String jwtId, String subject, String issuer, Set<String> audience,
 			Map<String, Object> claims,	String algorithm, long period) throws JwtException {
-		
+
 		try {
 			JwtBuilder builder = JJwtUtils
 					.jwtBuilder(jwtId, subject, issuer, audience, claims, period)
@@ -167,7 +148,7 @@ public class SignedWithSecretKeyJWTRepository implements JwtRepository<Key> {
 					.compressWith(getCompressWith())
 					// 设置算法（必须）
 					.signWith(secretKey, SignatureAlgorithm.forName(algorithm));
-			
+
 			// 签发时间
 			Date now = this.getClock().now();
 			builder.setIssuedAt(now);
@@ -179,7 +160,7 @@ public class SignedWithSecretKeyJWTRepository implements JwtRepository<Key> {
 				Date expiration = new Date(now.getTime() + period);
 				builder.setExpiration(expiration);
 			}
-			
+
 			return builder.compact();
 		} catch (InvalidKeyException e) {
 			throw new JwtException(e);
@@ -191,9 +172,9 @@ public class SignedWithSecretKeyJWTRepository implements JwtRepository<Key> {
 	/**
 	 * Verify the validity of JWT
 	 * @author 				: <a href="https://github.com/hiwepy">hiwepy</a>
-	 * @param secretKey 	: 
+	 * @param secretKey 	:
 	 * <p>If the jws was signed with a SecretKey, the same SecretKey should be specified on the JwtParser. </p>
-	 * <p>If the jws was signed with a PrivateKey, that key's corresponding PublicKey (not the PrivateKey) should be specified on the JwtParser.</p> 
+	 * <p>If the jws was signed with a PrivateKey, that key's corresponding PublicKey (not the PrivateKey) should be specified on the JwtParser.</p>
 	 * @param token  		: JSON Web Token (JWT)
 	 * @param checkExpiry 	: If Check validity.
 	 * @return If Validity
@@ -201,16 +182,16 @@ public class SignedWithSecretKeyJWTRepository implements JwtRepository<Key> {
 	 */
 	@Override
 	public boolean verify(Key secretKey, String token, boolean checkExpiry) throws JwtException {
-			
-		
+
+
 		try {
-			
+
 			// Retrieve / verify the JWT claims according to the app requirements
 			JwtParser jwtParser = this.getJwtParser(secretKey, checkExpiry);
-			 
+
 			// 解密JWT，如果无效则会抛出异常
 			Jws<Claims> jws = jwtParser.parseClaimsJws(token);
-			
+
 			Claims claims = jws.getBody();
 
 			Date issuedAt = claims.getIssuedAt();
@@ -232,7 +213,7 @@ public class SignedWithSecretKeyJWTRepository implements JwtRepository<Key> {
 				throw new ExpiredJwtException("Expired JWT value. ");
 			}
 			return true;
-			
+
 		} catch (MalformedJwtException e) {
 			throw new IncorrectJwtException(e);
 		} catch (MissingClaimException e) {
@@ -250,15 +231,15 @@ public class SignedWithSecretKeyJWTRepository implements JwtRepository<Key> {
 		} catch (IllegalArgumentException e) {
 			throw new IncorrectJwtException(e);
 		}
-		
+
 	}
 
 	/**
 	 * Parser JSON Web Token (JWT)
 	 * @author 		：<a href="https://github.com/hiwepy">hiwepy</a>
-	 * @param secretKey 	: 
+	 * @param secretKey 	:
 	 * <p>If the jws was signed with a SecretKey, the same SecretKey should be specified on the JwtParser. </p>
-	 * <p>If the jws was signed with a PrivateKey, that key's corresponding PublicKey (not the PrivateKey) should be specified on the JwtParser.</p> 
+	 * <p>If the jws was signed with a PrivateKey, that key's corresponding PublicKey (not the PrivateKey) should be specified on the JwtParser.</p>
 	 * @param token  		: JSON Web Token (JWT)
 	 * @param checkExpiry 	: If Check validity.
 	 * @return JwtPlayload {@link JwtPayload}
@@ -267,12 +248,12 @@ public class SignedWithSecretKeyJWTRepository implements JwtRepository<Key> {
 	@Override
 	public JwtPayload getPlayload(Key secretKey, String token, boolean checkExpiry)  throws JwtException {
 		try {
-			
+
 			// Retrieve / verify the JWT claims according to the app requirements
 			JwtParser jwtParser = this.getJwtParser(secretKey, checkExpiry);
-			
+
 			Jws<Claims> jws = jwtParser.parseClaimsJws(token);
-			
+
 			return JJwtUtils.payload(jws.getBody());
 		} catch (MalformedJwtException e) {
 			throw new IncorrectJwtException(e);
@@ -293,7 +274,7 @@ public class SignedWithSecretKeyJWTRepository implements JwtRepository<Key> {
 		} catch (ParseException e) {
 			throw new IncorrectJwtException(e);
 		}
-		
+
 	}
 
 	public long getAllowedClockSkewSeconds() {
@@ -311,7 +292,7 @@ public class SignedWithSecretKeyJWTRepository implements JwtRepository<Key> {
 	public void setCompressWith(CompressionCodec compressWith) {
 		this.compressWith = compressWith;
 	}
-	
+
 	public CompressionCodecResolver getCompressionCodecResolver() {
 		return compressionCodecResolver;
 	}
@@ -327,5 +308,5 @@ public class SignedWithSecretKeyJWTRepository implements JwtRepository<Key> {
 	public void setClock(Clock clock) {
 		this.clock = clock;
 	}
-	
+
 }

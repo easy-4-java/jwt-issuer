@@ -7,16 +7,10 @@
 		<artifactId>jwt-issuer</artifactId>
 		<version>1.1.8.RELEASE</version>
 	</parent>
-	
+
 	<artifactId>jwt-issuer-with-nimbus</artifactId>
 
 	<dependencies>
-		<!-- Java Servlet API -->
-		<dependency>
-			<groupId>javax.servlet</groupId>
-			<artifactId>javax.servlet-api</artifactId>
-			<scope>provided</scope>
-		</dependency>
 		<dependency>
 			<groupId>${project.groupId}</groupId>
 			<artifactId>jwt-issuer-api</artifactId>

@@ -19,6 +19,7 @@ import java.text.ParseException;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 import com.github.hiwepy.jwt.JwtPayload;
 import com.github.hiwepy.jwt.exception.IncorrectJwtException;
@@ -80,7 +81,7 @@ public class SignedWithRsaAndEncryptedWithRsaJWTRepository implements JwtKeyPair
 	 * @throws JwtException When Authentication Exception
 	 */
 	@Override
-	public String issueJwt(RSAKey signingKey, RSAKey secretKey, String jwtId, String subject, String issuer, String audience,
+	public String issueJwt(RSAKey signingKey, RSAKey secretKey, String jwtId, String subject, String issuer, Set<String> audience,
 			String roles, String permissions, String algorithm, long period)  throws JwtException {
 		 
 		Map<String, Object> claims =  new HashMap<String, Object>();
@@ -113,7 +114,7 @@ public class SignedWithRsaAndEncryptedWithRsaJWTRepository implements JwtKeyPair
 	 * @throws JwtException When Authentication Exception
 	 */
 	@Override
-	public String issueJwt(RSAKey signingKey, RSAKey secretKey, String jwtId, String subject, String issuer, String audience,
+	public String issueJwt(RSAKey signingKey, RSAKey secretKey, String jwtId, String subject, String issuer, Set<String> audience,
 			Map<String, Object> claims, String algorithm, long period) throws JwtException {
 		
 		try {

@@ -19,6 +19,7 @@ import java.text.ParseException;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 import com.github.hiwepy.jwt.JwtPayload;
 import com.github.hiwepy.jwt.exception.IncorrectJwtException;
@@ -44,9 +45,9 @@ import com.nimbusds.jwt.SignedJWT;
  * https://www.connect2id.com/products/nimbus-jose-jwt/examples/jwt-with-eddsa
  */
 public class SignedWithEdJWTRepository implements JwtRepository<OctetKeyPair> {
-	
+
 	private JwtTimeProvider timeProvider = JwtTimeProvider.DEFAULT_TIME_PROVIDER;
-	
+
 	/**
 	 * Issue JSON Web Token (JWT)
 	 * @author ：<a href="https://github.com/hiwepy">hiwepy</a>
@@ -63,17 +64,17 @@ public class SignedWithEdJWTRepository implements JwtRepository<OctetKeyPair> {
 	 * @throws JwtException When Authentication Exception
 	 */
 	@Override
-	public String issueJwt(OctetKeyPair signingKey, String jwtId, String subject, String issuer, String audience,
+	public String issueJwt(OctetKeyPair signingKey, String jwtId, String subject, String issuer, Set<String> audience,
 			String roles, String permissions, String algorithm, long period)  throws JwtException {
-		
+
 		Map<String, Object> claims =  new HashMap<String, Object>();
 		claims.put("roles", roles);
 		claims.put("perms", permissions);
-		
+
 		return this.issueJwt(signingKey, jwtId, subject, issuer, audience, claims, algorithm, period);
-		
+
 	}
-	
+
 
 	/**
 	 * Issue JSON Web Token (JWT)
@@ -90,12 +91,12 @@ public class SignedWithEdJWTRepository implements JwtRepository<OctetKeyPair> {
 	 * @throws JwtException When Authentication Exception
 	 */
 	@Override
-	public String issueJwt(OctetKeyPair signingKey, String jwtId, String subject, String issuer, String audience,
+	public String issueJwt(OctetKeyPair signingKey, String jwtId, String subject, String issuer, Set<String> audience,
 			Map<String, Object> claims, String algorithm, long period) throws JwtException {
 		try {
-			
+
 			//-------------------- Step 1：Get ClaimsSet --------------------
-			
+
 			// Prepare JWT with claims set
 			JWTClaimsSet.Builder builder = NimbusdsUtils.claimsSet(jwtId, subject, issuer, audience, claims, period);
 			// 签发时间
@@ -111,19 +112,19 @@ public class SignedWithEdJWTRepository implements JwtRepository<OctetKeyPair> {
 				builder.expirationTime(expiration);
 			}
 			JWTClaimsSet claimsSet = builder.build();
-			
+
 			//-------------------- Step 2：EdDSA Signature --------------------
-			
+
 			// Request JWS Header with EdDSA JWSAlgorithm
 			JWSHeader jwsHeader = new JWSHeader.Builder(JWSAlgorithm.EdDSA).keyID(signingKey.getKeyID()).build();
 			SignedJWT signedJWT = new SignedJWT(jwsHeader, claimsSet);
-						
+
 			// Create the EdDSA signer
 			JWSSigner signer = new Ed25519Signer(signingKey);
-			
+
 			// Compute the EC signature
 			signedJWT.sign(signer);
-			
+
 			// Serialize the JWS to compact form
 			return signedJWT.serialize();
 		} catch (IllegalStateException e) {
@@ -138,9 +139,9 @@ public class SignedWithEdJWTRepository implements JwtRepository<OctetKeyPair> {
 	/**
 	 * Verify the validity of JWT
 	 * @author 				: <a href="https://github.com/hiwepy">hiwepy</a>
-	 * @param signingKey 	: 
+	 * @param signingKey 	:
 	 * <p>If the jws was signed with a SecretKey, the same SecretKey should be specified on the JwtParser. </p>
-	 * <p>If the jws was signed with a PrivateKey, that key's corresponding PublicKey (not the PrivateKey) should be specified on the JwtParser.</p> 
+	 * <p>If the jws was signed with a PrivateKey, that key's corresponding PublicKey (not the PrivateKey) should be specified on the JwtParser.</p>
 	 * @param token  		: JSON Web Token (JWT)
 	 * @param checkExpiry 	: If Check validity.
 	 * @return If Validity
@@ -150,17 +151,17 @@ public class SignedWithEdJWTRepository implements JwtRepository<OctetKeyPair> {
 	public boolean verify(OctetKeyPair signingKey, String token, boolean checkExpiry) throws JwtException {
 
 		try {
-			
+
 			//-------------------- Step 1：JWT Parse --------------------
-			
+
 			// On the consumer side, parse the JWS and verify its EdDSA signature
 			SignedJWT signedJWT = SignedJWT.parse(token);
-			
+
 			//-------------------- Step 2：EdDSA Verify --------------------
-			
+
 			// Create Ed25519 verifier
 			JWSVerifier verifier = checkExpiry ? new ExtendedEd25519Verifier(signingKey.toPublicJWK(), signedJWT.getJWTClaimsSet(), this.getTimeProvider()) : new Ed25519Verifier(signingKey.toPublicJWK());
-			
+
 			// Retrieve / verify the JWT claims according to the app requirements
 			return signedJWT.verify(verifier);
 		} catch (IllegalStateException e) {
@@ -177,9 +178,9 @@ public class SignedWithEdJWTRepository implements JwtRepository<OctetKeyPair> {
 	/**
 	 * Parser JSON Web Token (JWT)
 	 * @author 		：<a href="https://github.com/hiwepy">hiwepy</a>
-	 * @param signingKey 	: 
+	 * @param signingKey 	:
 	 * <p>If the jws was signed with a SecretKey, the same SecretKey should be specified on the JwtParser. </p>
-	 * <p>If the jws was signed with a PrivateKey, that key's corresponding PublicKey (not the PrivateKey) should be specified on the JwtParser.</p> 
+	 * <p>If the jws was signed with a PrivateKey, that key's corresponding PublicKey (not the PrivateKey) should be specified on the JwtParser.</p>
 	 * @param token  		: JSON Web Token (JWT)
 	 * @param checkExpiry 	: If Check validity.
 	 * @return JwtPlayload {@link JwtPayload}
@@ -188,24 +189,24 @@ public class SignedWithEdJWTRepository implements JwtRepository<OctetKeyPair> {
 	@Override
 	public JwtPayload getPlayload(OctetKeyPair signingKey, String token, boolean checkExpiry)  throws JwtException {
 		try {
-			
+
 			//-------------------- Step 1：JWT Parse --------------------
-			
+
 			// On the consumer side, parse the JWS and verify its EdDSA signature
 			SignedJWT signedJWT = SignedJWT.parse(token);
-			
+
 			//-------------------- Step 2：EdDSA Verify --------------------
-			
+
 			// Create Ed25519 verifier
 			JWSVerifier verifier = checkExpiry ? new ExtendedEd25519Verifier(signingKey.toPublicJWK(), signedJWT.getJWTClaimsSet(), this.getTimeProvider()) : new Ed25519Verifier(signingKey.toPublicJWK());
-						
+
 			// Retrieve / verify the JWT claims according to the app requirements
 			if(!signedJWT.verify(verifier)) {
 				throw new JwtException(String.format("Invalid JSON Web Token (JWT) : %s", token));
 			}
-			
+
 			//-------------------- Step 3：Gets The Claims ---------------
-						
+
 			// Retrieve JWT claims
 			return NimbusdsUtils.payload(signedJWT.getJWTClaimsSet());
 		} catch (IllegalStateException e) {
@@ -226,5 +227,5 @@ public class SignedWithEdJWTRepository implements JwtRepository<OctetKeyPair> {
 	public void setTimeProvider(JwtTimeProvider timeProvider) {
 		this.timeProvider = timeProvider;
 	}
-	
+
 }

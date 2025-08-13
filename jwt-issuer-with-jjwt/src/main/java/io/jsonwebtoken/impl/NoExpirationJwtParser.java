@@ -15,398 +15,604 @@
  */
 package io.jsonwebtoken.impl;
 
-import java.security.Key;
-import java.util.Date;
-import java.util.Map;
-
-import javax.crypto.spec.SecretKeySpec;
-
-import io.jsonwebtoken.ClaimJwtException;
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Clock;
-import io.jsonwebtoken.CompressionCodec;
-import io.jsonwebtoken.CompressionCodecResolver;
-import io.jsonwebtoken.ExpiredJwtException;
-import io.jsonwebtoken.Header;
-import io.jsonwebtoken.IncorrectClaimException;
-import io.jsonwebtoken.InvalidClaimException;
-import io.jsonwebtoken.Jws;
-import io.jsonwebtoken.JwsHeader;
-import io.jsonwebtoken.Jwt;
-import io.jsonwebtoken.JwtHandler;
-import io.jsonwebtoken.JwtHandlerAdapter;
-import io.jsonwebtoken.JwtParser;
-import io.jsonwebtoken.MalformedJwtException;
-import io.jsonwebtoken.MissingClaimException;
-import io.jsonwebtoken.PrematureJwtException;
-import io.jsonwebtoken.SignatureAlgorithm;
-import io.jsonwebtoken.SigningKeyResolver;
-import io.jsonwebtoken.UnsupportedJwtException;
-import io.jsonwebtoken.impl.compression.DefaultCompressionCodecResolver;
-import io.jsonwebtoken.impl.crypto.DefaultJwtSignatureValidator;
-import io.jsonwebtoken.impl.crypto.JwtSignatureValidator;
-import io.jsonwebtoken.impl.lang.LegacyServices;
+import io.jsonwebtoken.*;
+import io.jsonwebtoken.impl.io.*;
+import io.jsonwebtoken.impl.lang.Bytes;
+import io.jsonwebtoken.impl.lang.Function;
+import io.jsonwebtoken.impl.lang.RedactedSupplier;
+import io.jsonwebtoken.impl.security.*;
+import io.jsonwebtoken.io.CompressionAlgorithm;
 import io.jsonwebtoken.io.Decoder;
-import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.io.DeserializationException;
 import io.jsonwebtoken.io.Deserializer;
-import io.jsonwebtoken.lang.Assert;
-import io.jsonwebtoken.lang.DateFormats;
+import io.jsonwebtoken.lang.Collections;
 import io.jsonwebtoken.lang.Objects;
-import io.jsonwebtoken.lang.Strings;
-import io.jsonwebtoken.security.InvalidKeyException;
+import io.jsonwebtoken.lang.*;
 import io.jsonwebtoken.security.SignatureException;
-import io.jsonwebtoken.security.WeakKeyException;
+import io.jsonwebtoken.security.*;
+
+import javax.crypto.SecretKey;
+import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.StandardCharsets;
+import java.security.Key;
+import java.security.PrivateKey;
+import java.security.Provider;
+import java.security.PublicKey;
+import java.util.*;
 
 @SuppressWarnings("unchecked")
-public class NoExpirationJwtParser implements JwtParser {
+public class NoExpirationJwtParser extends AbstractParser<Jwt<?, ?>> implements JwtParser {
 
-	 private static final int MILLISECONDS_PER_SECOND = 1000;
+    static final char SEPARATOR_CHAR = '.';
 
-    // TODO: make the folling fields final for v1.0
-    private byte[] keyBytes;
+    private static final JwtTokenizer jwtTokenizer = new JwtTokenizer();
 
-    private Key key;
+    static final String PRIV_KEY_VERIFY_MSG = "PrivateKeys may not be used to verify digital signatures. " +
+            "PrivateKeys are used to sign, and PublicKeys are used to verify.";
 
-    private SigningKeyResolver signingKeyResolver;
+    static final String PUB_KEY_DECRYPT_MSG = "PublicKeys may not be used to decrypt data. PublicKeys are " +
+            "used to encrypt, and PrivateKeys are used to decrypt.";
 
-    private CompressionCodecResolver compressionCodecResolver = new DefaultCompressionCodecResolver();
+    public static final String INCORRECT_EXPECTED_CLAIM_MESSAGE_TEMPLATE = "Expected %s claim to be: %s, but was: %s.";
 
-    private Decoder<String, byte[]> base64UrlDecoder = Decoders.BASE64URL;
+    public static final String MISSING_EXPECTED_CLAIM_VALUE_MESSAGE_TEMPLATE =
+            "Missing expected '%s' value in '%s' claim %s.";
 
-    private Deserializer<Map<String, ?>> deserializer;
+    public static final String MISSING_JWS_ALG_MSG = "JWS header does not contain a required 'alg' (Algorithm) " +
+            "header parameter.  This header parameter is mandatory per the JWS Specification, Section 4.1.1. See " +
+            "https://www.rfc-editor.org/rfc/rfc7515.html#section-4.1.1 for more information.";
 
-    private Claims expectedClaims = new DefaultClaims();
+    public static final String MISSING_JWE_ALG_MSG = "JWE header does not contain a required 'alg' (Algorithm) " +
+            "header parameter.  This header parameter is mandatory per the JWE Specification, Section 4.1.1. See " +
+            "https://www.rfc-editor.org/rfc/rfc7516.html#section-4.1.1 for more information.";
 
-    private Clock clock = DefaultClock.INSTANCE;
+    public static final String MISSING_JWS_DIGEST_MSG_FMT = "The JWS header references signature algorithm '%s' but " +
+            "the compact JWE string is missing the required signature.";
 
-    private long allowedClockSkewMillis = 0;
-    
-    public NoExpirationJwtParser() { }
-    
-    NoExpirationJwtParser(SigningKeyResolver signingKeyResolver,
-            Key key,
-            byte[] keyBytes,
-            Clock clock,
-            long allowedClockSkewMillis,
-            Claims expectedClaims,
-            Decoder<String, byte[]> base64UrlDecoder,
-            Deserializer<Map<String, ?>> deserializer,
-            CompressionCodecResolver compressionCodecResolver) {
-	this.signingKeyResolver = signingKeyResolver;
-	this.key = key;
-	this.keyBytes = keyBytes;
-	this.clock = clock;
-	this.allowedClockSkewMillis = allowedClockSkewMillis;
-	this.expectedClaims = expectedClaims;
-	this.base64UrlDecoder = base64UrlDecoder;
-	this.deserializer = deserializer;
-	this.compressionCodecResolver = compressionCodecResolver;
-	}
+    public static final String MISSING_JWE_DIGEST_MSG_FMT = "The JWE header references key management algorithm '%s' " +
+            "but the compact JWE string is missing the required AAD authentication tag.";
 
+    private static final String MISSING_ENC_MSG = "JWE header does not contain a required 'enc' (Encryption " +
+            "Algorithm) header parameter.  This header parameter is mandatory per the JWE Specification, " +
+            "Section 4.1.2. See https://www.rfc-editor.org/rfc/rfc7516.html#section-4.1.2 for more information.";
 
-    @Override
-    public JwtParser deserializeJsonWith(Deserializer<Map<String, ?>> deserializer) {
-        Assert.notNull(deserializer, "deserializer cannot be null.");
-        this.deserializer = deserializer;
-        return this;
-    }
+    private static final String UNSECURED_DISABLED_MSG_PREFIX = "Unsecured JWSs (those with an " +
+            DefaultHeader.ALGORITHM + " header value of '" + Jwts.SIG.NONE.getId() + "') are disallowed by " +
+            "default as mandated by https://www.rfc-editor.org/rfc/rfc7518.html#section-3.6. If you wish to " +
+            "allow them to be parsed, call the JwtParserBuilder.unsecured() method, but please read the " +
+            "security considerations covered in that method's JavaDoc before doing so. Header: ";
 
-    @Override
-    public JwtParser base64UrlDecodeWith(Decoder<String, byte[]> base64UrlDecoder) {
-        Assert.notNull(base64UrlDecoder, "base64UrlDecoder cannot be null.");
-        this.base64UrlDecoder = base64UrlDecoder;
-        return this;
-    }
+    private static final String CRIT_UNSECURED_MSG = "Unsecured JWSs (those with an " + DefaultHeader.ALGORITHM +
+            " header value of '" + Jwts.SIG.NONE.getId() + "') may not use the " + DefaultProtectedHeader.CRIT +
+            " header parameter per https://www.rfc-editor.org/rfc/rfc7515.html#section-4.1.11 (\"the [crit] Header " +
+            "Parameter MUST be integrity protected; therefore, it MUST occur only within [a] JWS Protected Header)\"." +
+            " Header: %s";
 
-    @Override
-    public JwtParser requireIssuedAt(Date issuedAt) {
-        expectedClaims.setIssuedAt(issuedAt);
-        return this;
-    }
+    private static final String CRIT_MISSING_MSG = "Protected Header " +
+            DefaultProtectedHeader.CRIT + " set references header name '%s', but the header does not contain an " +
+            "associated '%s' header parameter as required by " +
+            "https://www.rfc-editor.org/rfc/rfc7515.html#section-4.1.11. Header: %s";
 
-    @Override
-    public JwtParser requireIssuer(String issuer) {
-        expectedClaims.setIssuer(issuer);
-        return this;
-    }
+    private static final String CRIT_UNSUPPORTED_MSG = "Protected Header " + DefaultProtectedHeader.CRIT +
+            " set references unsupported header name '%s'. Application developers expecting to support a JWT " +
+            "extension using header '%s' in their application code must indicate it " +
+            "is supported by using the JwtParserBuilder.critical method. Header: %s";
 
-    @Override
-    public JwtParser requireAudience(String audience) {
-        expectedClaims.setAudience(audience);
-        return this;
-    }
+    private static final String JWE_NONE_MSG = "JWEs do not support key management " + DefaultHeader.ALGORITHM +
+            " header value '" + Jwts.SIG.NONE.getId() + "' per " +
+            "https://www.rfc-editor.org/rfc/rfc7518.html#section-4.1";
 
-    @Override
-    public JwtParser requireSubject(String subject) {
-        expectedClaims.setSubject(subject);
-        return this;
-    }
+    private static final String JWS_NONE_SIG_MISMATCH_MSG = "The JWS header references signature algorithm '" +
+            Jwts.SIG.NONE.getId() + "' yet the compact JWS string contains a signature. This is not permitted " +
+            "per https://tools.ietf.org/html/rfc7518#section-3.6.";
 
-    @Override
-    public JwtParser requireId(String id) {
-        expectedClaims.setId(id);
-        return this;
-    }
+    private static final String B64_MISSING_PAYLOAD = "Unable to verify JWS signature: the parser has encountered an " +
+            "Unencoded Payload JWS with detached payload, but the detached payload value required for signature " +
+            "verification has not been provided. If you expect to receive and parse Unencoded Payload JWSs in your " +
+            "application, the overloaded JwtParser.parseSignedContent or JwtParser.parseSignedClaims methods that " +
+            "accept a byte[] or InputStream must be used for these kinds of JWSs. Header: %s";
 
-    @Override
-    public JwtParser requireExpiration(Date expiration) {
-        expectedClaims.setExpiration(expiration);
-        return this;
-    }
+    private static final String B64_DECOMPRESSION_MSG = "The JWT header references compression algorithm " +
+            "'%s', but payload decompression for Unencoded JWSs (those with an " + DefaultJwsHeader.B64 +
+            " header value of false) that rely on a SigningKeyResolver are disallowed " +
+            "by default to protect against [Denial of Service attacks](" +
+            "https://www.usenix.org/system/files/conference/usenixsecurity15/sec15-paper-pellegrino.pdf).  If you " +
+            "wish to enable Unencoded JWS payload decompression, configure the JwtParserBuilder." +
+            "keyLocator(Locator) and do not configure a SigningKeyResolver.";
 
-    @Override
-    public JwtParser requireNotBefore(Date notBefore) {
-        expectedClaims.setNotBefore(notBefore);
-        return this;
-    }
+    private static final String UNPROTECTED_DECOMPRESSION_MSG = "The JWT header references compression algorithm " +
+            "'%s', but payload decompression for Unprotected JWTs (those with an " + DefaultHeader.ALGORITHM +
+            " header value of '" + Jwts.SIG.NONE.getId() + "') or Unencoded JWSs (those with a " +
+            DefaultJwsHeader.B64 + " header value of false) that also rely on a SigningKeyResolver are disallowed " +
+            "by default to protect against [Denial of Service attacks](" +
+            "https://www.usenix.org/system/files/conference/usenixsecurity15/sec15-paper-pellegrino.pdf).  If you " +
+            "wish to enable Unsecure JWS or Unencoded JWS payload decompression, call the JwtParserBuilder." +
+            "unsecuredDecompression() method, but please read the security considerations covered in that " +
+            "method's JavaDoc before doing so.";
 
-    @Override
-    public JwtParser require(String claimName, Object value) {
-        Assert.hasText(claimName, "claim name cannot be null or empty.");
-        Assert.notNull(value, "The value cannot be null for claim name: " + claimName);
-        expectedClaims.put(claimName, value);
-        return this;
-    }
+    private final Provider provider;
 
-    @Override
-    public JwtParser setClock(Clock clock) {
-        Assert.notNull(clock, "Clock instance cannot be null.");
-        this.clock = clock;
-        return this;
-    }
+    @SuppressWarnings("deprecation")
+    private final SigningKeyResolver signingKeyResolver;
 
-    @Override
-    public JwtParser setAllowedClockSkewSeconds(long seconds) {
-        this.allowedClockSkewMillis = Math.max(0, seconds * MILLISECONDS_PER_SECOND);
-        return this;
-    }
+    private final boolean unsecured;
 
-    @Override
-    public JwtParser setSigningKey(byte[] key) {
-        Assert.notEmpty(key, "signing key cannot be null or empty.");
-        this.keyBytes = key;
-        return this;
-    }
+    private final boolean unsecuredDecompression;
 
-    @Override
-    public JwtParser setSigningKey(String base64EncodedSecretKey) {
-        Assert.hasText(base64EncodedSecretKey, "signing key cannot be null or empty.");
-        this.keyBytes = Decoders.BASE64.decode(base64EncodedSecretKey);
-        return this;
-    }
+    private final Function<JwsHeader, SecureDigestAlgorithm<?, ?>> sigAlgs;
 
-    @Override
-    public JwtParser setSigningKey(Key key) {
-        Assert.notNull(key, "signing key cannot be null.");
-        this.key = key;
-        return this;
-    }
+    private final Function<JweHeader, AeadAlgorithm> encAlgs;
 
-    @Override
-    public JwtParser setSigningKeyResolver(SigningKeyResolver signingKeyResolver) {
-        Assert.notNull(signingKeyResolver, "SigningKeyResolver cannot be null.");
+    private final Function<JweHeader, KeyAlgorithm<?, ?>> keyAlgs;
+
+    private final Function<Header, CompressionAlgorithm> zipAlgs;
+
+    private final Locator<? extends Key> keyLocator;
+
+    private final Decoder<InputStream, InputStream> decoder;
+
+    private final Deserializer<Map<String, ?>> deserializer;
+
+    private final ClaimsBuilder expectedClaims;
+
+    private final Clock clock;
+
+    private final Set<String> critical;
+
+    private final long allowedClockSkewMillis;
+
+    //SigningKeyResolver will be removed for 1.0:
+    @SuppressWarnings("deprecation")
+    NoExpirationJwtParser(Provider provider,
+                     SigningKeyResolver signingKeyResolver,
+                     boolean unsecured,
+                     boolean unsecuredDecompression,
+                     Locator<? extends Key> keyLocator,
+                     Clock clock,
+                     Set<String> critical,
+                     long allowedClockSkewMillis,
+                     DefaultClaims expectedClaims,
+                     Decoder<InputStream, InputStream> base64UrlDecoder,
+                     Deserializer<Map<String, ?>> deserializer,
+                     CompressionCodecResolver compressionCodecResolver,
+                     Registry<String, CompressionAlgorithm> zipAlgs,
+                     Registry<String, SecureDigestAlgorithm<?, ?>> sigAlgs,
+                     Registry<String, KeyAlgorithm<?, ?>> keyAlgs,
+                     Registry<String, AeadAlgorithm> encAlgs) {
+        this.provider = provider;
+        this.unsecured = unsecured;
+        this.unsecuredDecompression = unsecuredDecompression;
         this.signingKeyResolver = signingKeyResolver;
-        return this;
+        this.keyLocator = Assert.notNull(keyLocator, "Key Locator cannot be null.");
+        this.clock = Assert.notNull(clock, "Clock cannot be null.");
+        this.critical = Collections.nullSafe(critical);
+        this.allowedClockSkewMillis = allowedClockSkewMillis;
+        this.expectedClaims = Jwts.claims().add(expectedClaims);
+        this.decoder = Assert.notNull(base64UrlDecoder, "base64UrlDecoder cannot be null.");
+        this.deserializer = Assert.notNull(deserializer, "JSON Deserializer cannot be null.");
+        this.sigAlgs = new IdLocator<>(DefaultHeader.ALGORITHM, sigAlgs, MISSING_JWS_ALG_MSG);
+        this.keyAlgs = new IdLocator<>(DefaultHeader.ALGORITHM, keyAlgs, MISSING_JWE_ALG_MSG);
+        this.encAlgs = new IdLocator<>(DefaultJweHeader.ENCRYPTION_ALGORITHM, encAlgs, MISSING_ENC_MSG);
+        this.zipAlgs = compressionCodecResolver != null ? new CompressionCodecLocator(compressionCodecResolver) :
+                new IdLocator<>(DefaultHeader.COMPRESSION_ALGORITHM, zipAlgs, null);
     }
 
     @Override
-    public JwtParser setCompressionCodecResolver(CompressionCodecResolver compressionCodecResolver) {
-        Assert.notNull(compressionCodecResolver, "compressionCodecResolver cannot be null.");
-        this.compressionCodecResolver = compressionCodecResolver;
-        return this;
-    }
-
-    @Override
-    public boolean isSigned(String jwt) {
-
-        if (jwt == null) {
+    public boolean isSigned(CharSequence compact) {
+        if (!Strings.hasText(compact)) {
             return false;
         }
+        try {
+            final TokenizedJwt tokenized = jwtTokenizer.tokenize(new CharSequenceReader(compact));
+            return !(tokenized instanceof TokenizedJwe) && Strings.hasText(tokenized.getDigest());
+        } catch (MalformedJwtException e) {
+            return false;
+        }
+    }
 
-        int delimiterCount = 0;
+    private static boolean hasContentType(Header header) {
+        return header != null && Strings.hasText(header.getContentType());
+    }
 
-        for (int i = 0; i < jwt.length(); i++) {
-            char c = jwt.charAt(i);
+    private byte[] verifySignature(final TokenizedJwt tokenized, final JwsHeader jwsHeader, final String alg,
+                                   @SuppressWarnings("deprecation") SigningKeyResolver resolver, Claims claims, Payload payload) {
 
-            if (delimiterCount == 2) {
-                return !Character.isWhitespace(c) && c != SEPARATOR_CHAR;
-            }
+        Assert.notNull(resolver, "SigningKeyResolver instance cannot be null.");
 
-            if (c == SEPARATOR_CHAR) {
-                delimiterCount++;
-            }
+        SecureDigestAlgorithm<?, Key> algorithm;
+        try {
+            algorithm = (SecureDigestAlgorithm<?, Key>) sigAlgs.apply(jwsHeader);
+        } catch (UnsupportedJwtException e) {
+            //For backwards compatibility.  TODO: remove this try/catch block for 1.0 and let UnsupportedJwtException propagate
+            String msg = "Unsupported signature algorithm '" + alg + "'";
+            throw new SignatureException(msg, e);
+        }
+        Assert.stateNotNull(algorithm, "JWS Signature Algorithm cannot be null.");
+
+        //digitally signed, let's assert the signature:
+        Key key;
+        if (claims != null) {
+            key = resolver.resolveSigningKey(jwsHeader, claims);
+        } else {
+            key = resolver.resolveSigningKey(jwsHeader, payload.getBytes());
+        }
+        if (key == null) {
+            String msg = "Cannot verify JWS signature: unable to locate signature verification key for JWS with header: " + jwsHeader;
+            throw new UnsupportedJwtException(msg);
+        }
+        Provider provider = ProviderKey.getProvider(key, this.provider); // extract if necessary
+        key = ProviderKey.getKey(key); // unwrap if necessary, MUST be called after ProviderKey.getProvider
+        Assert.stateNotNull(key, "ProviderKey cannot be null."); //ProviderKey impl doesn't allow null
+        if (key instanceof PrivateKey) {
+            throw new InvalidKeyException(PRIV_KEY_VERIFY_MSG);
         }
 
-        return false;
+        final byte[] signature = decode(tokenized.getDigest(), "JWS signature");
+
+        //re-create the jwt part without the signature.  This is what is needed for signature verification:
+        InputStream payloadStream = null;
+        InputStream verificationInput;
+        if (jwsHeader.isPayloadEncoded()) {
+            int len = tokenized.getProtected().length() + 1 + tokenized.getPayload().length();
+            CharBuffer cb = CharBuffer.allocate(len);
+            cb.put(Strings.wrap(tokenized.getProtected()));
+            cb.put(SEPARATOR_CHAR);
+            cb.put(Strings.wrap(tokenized.getPayload()));
+            cb.rewind();
+            ByteBuffer bb = StandardCharsets.US_ASCII.encode(cb);
+            bb.rewind();
+            byte[] data = new byte[bb.remaining()];
+            bb.get(data);
+            verificationInput = Streams.of(data);
+        } else { // b64 extension
+            ByteBuffer headerBuf = StandardCharsets.US_ASCII.encode(Strings.wrap(tokenized.getProtected()));
+            headerBuf.rewind();
+            ByteBuffer buf = ByteBuffer.allocate(headerBuf.remaining() + 1);
+            buf.put(headerBuf);
+            buf.put((byte) SEPARATOR_CHAR);
+            buf.rewind();
+            byte[] data = new byte[buf.remaining()];
+            buf.get(data);
+            InputStream prefixStream = Streams.of(data);
+            payloadStream = payload.toInputStream();
+            // We wrap the payloadStream here in an UncloseableInputStream to prevent the SequenceInputStream from
+            // closing it since we'll need to rewind/reset it if decompression is enabled
+            verificationInput = new SequenceInputStream(prefixStream, new UncloseableInputStream(payloadStream));
+        }
+
+        try {
+            VerifySecureDigestRequest<Key> request =
+                    new DefaultVerifySecureDigestRequest<>(verificationInput, provider, null, key, signature);
+            if (!algorithm.verify(request)) {
+                String msg = "JWT signature does not match locally computed signature. JWT validity cannot be " +
+                        "asserted and should not be trusted.";
+                throw new SignatureException(msg);
+            }
+        } catch (WeakKeyException e) {
+            throw e;
+        } catch (InvalidKeyException | IllegalArgumentException e) {
+            String algId = algorithm.getId();
+            String msg = "The parsed JWT indicates it was signed with the '" + algId + "' signature " +
+                    "algorithm, but the provided " + key.getClass().getName() + " key may " +
+                    "not be used to verify " + algId + " signatures.  Because the specified " +
+                    "key reflects a specific and expected algorithm, and the JWT does not reflect " +
+                    "this algorithm, it is likely that the JWT was not expected and therefore should not be " +
+                    "trusted.  Another possibility is that the parser was provided the incorrect " +
+                    "signature verification key, but this cannot be assumed for security reasons.";
+            throw new UnsupportedJwtException(msg, e);
+        } finally {
+            Streams.reset(payloadStream);
+        }
+
+        return signature;
     }
 
     @Override
-    public Jwt parse(String jwt) throws ExpiredJwtException, MalformedJwtException, SignatureException {
+    public Jwt<?, ?> parse(Reader reader) {
+        Assert.notNull(reader, "Reader cannot be null.");
+        return parse(reader, Payload.EMPTY);
+    }
 
-        // TODO, this logic is only need for a now deprecated code path
-        // remove this block in v1.0 (the equivalent is already in DefaultJwtParserBuilder)
-        if (this.deserializer == null) {
-            // try to find one based on the services available
-            // TODO: This util class will throw a UnavailableImplementationException here to retain behavior of previous version, remove in v1.0
-            this.deserializer = LegacyServices.loadFirst(Deserializer.class);
-        }
+    private Jwt<?, ?> parse(Reader compact, Payload unencodedPayload) {
 
-        Assert.hasText(jwt, "JWT String argument cannot be null or empty.");
+        Assert.notNull(compact, "Compact reader cannot be null.");
+        Assert.stateNotNull(unencodedPayload, "internal error: unencodedPayload is null.");
 
-        String base64UrlEncodedHeader = null;
-        String base64UrlEncodedPayload = null;
-        String base64UrlEncodedDigest = null;
-
-        int delimiterCount = 0;
-
-        StringBuilder sb = new StringBuilder(128);
-
-        for (char c : jwt.toCharArray()) {
-
-            if (c == SEPARATOR_CHAR) {
-
-                CharSequence tokenSeq = Strings.clean(sb);
-                String token = tokenSeq != null ? tokenSeq.toString() : null;
-
-                if (delimiterCount == 0) {
-                    base64UrlEncodedHeader = token;
-                } else if (delimiterCount == 1) {
-                    base64UrlEncodedPayload = token;
-                }
-
-                delimiterCount++;
-                sb.setLength(0);
-            } else {
-                sb.append(c);
-            }
-        }
-
-        if (delimiterCount != 2) {
-            String msg = "JWT strings must contain exactly 2 period characters. Found: " + delimiterCount;
+        final TokenizedJwt tokenized = jwtTokenizer.tokenize(compact);
+        final CharSequence base64UrlHeader = tokenized.getProtected();
+        if (!Strings.hasText(base64UrlHeader)) {
+            String msg = "Compact JWT strings MUST always have a Base64Url protected header per " +
+                    "https://tools.ietf.org/html/rfc7519#section-7.2 (steps 2-4).";
             throw new MalformedJwtException(msg);
-        }
-        if (sb.length() > 0) {
-            base64UrlEncodedDigest = sb.toString();
-        }
-
-        if (base64UrlEncodedPayload == null) {
-            throw new MalformedJwtException("JWT string '" + jwt + "' is missing a body/payload.");
         }
 
         // =============== Header =================
-        Header header = null;
+        final byte[] headerBytes = decode(base64UrlHeader, "protected header");
+        Map<String, ?> m = deserialize(Streams.of(headerBytes), "protected header");
+        Header header;
+        try {
+            header = tokenized.createHeader(m);
+        } catch (Exception e) {
+            String msg = "Invalid protected header: " + e.getMessage();
+            throw new MalformedJwtException(msg, e);
+        }
 
-        CompressionCodec compressionCodec = null;
+        // https://tools.ietf.org/html/rfc7515#section-10.7 , second-to-last bullet point, note the use of 'always':
+        //
+        //   *  Require that the "alg" Header Parameter be carried in the JWS
+        //      Protected Header.  (This is always the case when using the JWS
+        //      Compact Serialization and is the approach taken by CMS [RFC6211].)
+        //
+        final String alg = Strings.clean(header.getAlgorithm());
+        if (!Strings.hasText(alg)) {
+            String msg = tokenized instanceof TokenizedJwe ? MISSING_JWE_ALG_MSG : MISSING_JWS_ALG_MSG;
+            throw new MalformedJwtException(msg);
+        }
+        final boolean unsecured = Jwts.SIG.NONE.getId().equalsIgnoreCase(alg);
 
-        if (base64UrlEncodedHeader != null) {
-            byte[] bytes = base64UrlDecoder.decode(base64UrlEncodedHeader);
-            String origValue = new String(bytes, Strings.UTF_8);
-            Map<String, Object> m = (Map<String, Object>) readValue(origValue);
-
-            if (base64UrlEncodedDigest != null) {
-                header = new DefaultJwsHeader(m);
-            } else {
-                header = new DefaultHeader(m);
+        final CharSequence base64UrlDigest = tokenized.getDigest();
+        final boolean hasDigest = Strings.hasText(base64UrlDigest);
+        if (unsecured) {
+            if (tokenized instanceof TokenizedJwe) {
+                throw new MalformedJwtException(JWE_NONE_MSG);
             }
-
-            compressionCodec = compressionCodecResolver.resolveCompressionCodec(header);
+            // Unsecured JWTs are disabled by default per the RFC:
+            if (!this.unsecured) {
+                String msg = UNSECURED_DISABLED_MSG_PREFIX + header;
+                throw new UnsupportedJwtException(msg);
+            }
+            if (hasDigest) {
+                throw new MalformedJwtException(JWS_NONE_SIG_MISMATCH_MSG);
+            }
+            if (header.containsKey(DefaultProtectedHeader.CRIT.getId())) {
+                String msg = String.format(CRIT_UNSECURED_MSG, header);
+                throw new MalformedJwtException(msg);
+            }
+        } else if (!hasDigest) { // something other than 'none'.  Must have a digest component:
+            String fmt = tokenized instanceof TokenizedJwe ? MISSING_JWE_DIGEST_MSG_FMT : MISSING_JWS_DIGEST_MSG_FMT;
+            String msg = String.format(fmt, alg);
+            throw new MalformedJwtException(msg);
+        }
+        // ----- crit assertions -----
+        if (header instanceof ProtectedHeader) {
+            Set<String> crit = Collections.nullSafe(((ProtectedHeader) header).getCritical());
+            Set<String> supportedCrit = this.critical;
+            String b64Id = DefaultJwsHeader.B64.getId();
+            if (!unencodedPayload.isEmpty() && !this.critical.contains(b64Id)) {
+                // The application developer explicitly indicates they're using a B64 payload, so
+                // ensure that the B64 crit header is supported, even if they forgot to configure it on the
+                // parser builder:
+                supportedCrit = new LinkedHashSet<>(Collections.size(this.critical) + 1);
+                supportedCrit.add(DefaultJwsHeader.B64.getId());
+                supportedCrit.addAll(this.critical);
+            }
+            // assert any values per https://www.rfc-editor.org/rfc/rfc7515.html#section-4.1.11:
+            for (String name : crit) {
+                if (!header.containsKey(name)) {
+                    String msg = String.format(CRIT_MISSING_MSG, name, name, header);
+                    throw new MalformedJwtException(msg);
+                }
+                if (!supportedCrit.contains(name)) {
+                    String msg = String.format(CRIT_UNSUPPORTED_MSG, name, name, header);
+                    throw new UnsupportedJwtException(msg);
+                }
+            }
         }
 
-        // =============== Body =================
-        byte[] bytes = base64UrlDecoder.decode(base64UrlEncodedPayload);
-        if (compressionCodec != null) {
-            bytes = compressionCodec.decompress(bytes);
+        // =============== Payload =================
+        final CharSequence payloadToken = tokenized.getPayload();
+        Payload payload;
+        boolean integrityVerified = false; // only true after successful signature verification or AEAD decryption
+
+        // check if b64 extension enabled:
+        final boolean payloadBase64UrlEncoded = !(header instanceof JwsHeader) || ((JwsHeader) header).isPayloadEncoded();
+        if (payloadBase64UrlEncoded) {
+            // standard encoding, so decode it:
+            byte[] data = decode(tokenized.getPayload(), "payload");
+            payload = new Payload(data, header.getContentType());
+        } else {
+            // The JWT uses the b64 extension, and we already know the parser supports that extension at this point
+            // in the code execution path because of the ----- crit ----- assertions section above as well as the
+            // (JwsHeader).isPayloadEncoded() check
+            if (Strings.hasText(payloadToken)) {
+                // we need to verify what was in the token, otherwise it'd be a security issue if we ignored it
+                // and assumed the (likely safe) unencodedPayload value instead:
+                payload = new Payload(payloadToken, header.getContentType());
+            } else {
+                //no payload token (a detached payload), so we need to ensure that they've specified the payload value:
+                if (unencodedPayload.isEmpty()) {
+                    String msg = String.format(B64_MISSING_PAYLOAD, header);
+                    throw new SignatureException(msg);
+                }
+                // otherwise, use the specified payload:
+                payload = unencodedPayload;
+            }
         }
-        String payload = new String(bytes, Strings.UTF_8);
 
-        Claims claims = null;
-
-        if (payload.charAt(0) == '{' && payload.charAt(payload.length() - 1) == '}') { //likely to be json, parse it:
-            Map<String, Object> claimsMap = (Map<String, Object>) readValue(payload);
-            claims = new DefaultClaims(claimsMap);
+        if (tokenized instanceof TokenizedJwe && payload.isEmpty()) {
+            // Only JWS payload can be empty per https://github.com/jwtk/jjwt/pull/540
+            String msg = "Compact JWE strings MUST always contain a payload (ciphertext).";
+            throw new MalformedJwtException(msg);
         }
 
-        // =============== Signature =================
-        if (base64UrlEncodedDigest != null) { //it is signed - validate the signature
+        byte[] iv = null;
+        byte[] digest = null; // either JWE AEAD tag or JWS signature after Base64Url-decoding
+        if (tokenized instanceof TokenizedJwe) {
 
-            JwsHeader jwsHeader = (JwsHeader) header;
+            TokenizedJwe tokenizedJwe = (TokenizedJwe) tokenized;
+            JweHeader jweHeader = Assert.stateIsInstance(JweHeader.class, header, "Not a JweHeader. ");
 
-            SignatureAlgorithm algorithm = null;
-
-            if (header != null) {
-                String alg = jwsHeader.getAlgorithm();
-                if (Strings.hasText(alg)) {
-                    algorithm = SignatureAlgorithm.forName(alg);
+            byte[] cekBytes = Bytes.EMPTY; //ignored unless using an encrypted key algorithm
+            CharSequence base64Url = tokenizedJwe.getEncryptedKey();
+            if (Strings.hasText(base64Url)) {
+                cekBytes = decode(base64Url, "JWE encrypted key");
+                if (Bytes.isEmpty(cekBytes)) {
+                    String msg = "Compact JWE string represents an encrypted key, but the key is empty.";
+                    throw new MalformedJwtException(msg);
                 }
             }
 
-            if (algorithm == null || algorithm == SignatureAlgorithm.NONE) {
-                //it is plaintext, but it has a signature.  This is invalid:
-                String msg = "JWT string has a digest/signature, but the header does not reference a valid signature " +
-                    "algorithm.";
+            base64Url = tokenizedJwe.getIv();
+            if (Strings.hasText(base64Url)) {
+                iv = decode(base64Url, "JWE Initialization Vector");
+            }
+            if (Bytes.isEmpty(iv)) {
+                String msg = "Compact JWE strings must always contain an Initialization Vector.";
                 throw new MalformedJwtException(msg);
             }
 
-            if (key != null && keyBytes != null) {
-                throw new IllegalStateException("A key object and key bytes cannot both be specified. Choose either.");
-            } else if ((key != null || keyBytes != null) && signingKeyResolver != null) {
-                String object = key != null ? "a key object" : "key bytes";
-                throw new IllegalStateException("A signing key resolver and " + object + " cannot both be specified. Choose either.");
+            // The AAD (Additional Authenticated Data) scheme for compact JWEs is to use the ASCII bytes of the
+            // raw base64url text as the AAD, and NOT the base64url-decoded bytes per
+            // https://www.rfc-editor.org/rfc/rfc7516.html#section-5.1, Step 14.
+            ByteBuffer buf = StandardCharsets.US_ASCII.encode(Strings.wrap(base64UrlHeader));
+            final byte[] aadBytes = new byte[buf.remaining()];
+            buf.get(aadBytes);
+            InputStream aad = Streams.of(aadBytes);
+
+            base64Url = base64UrlDigest;
+            //guaranteed to be non-empty via the `alg` + digest check above:
+            Assert.hasText(base64Url, "JWE AAD Authentication Tag cannot be null or empty.");
+            digest = decode(base64Url, "JWE AAD Authentication Tag");
+            if (Bytes.isEmpty(digest)) {
+                String msg = "Compact JWE strings must always contain an AAD Authentication Tag.";
+                throw new MalformedJwtException(msg);
             }
 
-            //digitally signed, let's assert the signature:
-            Key key = this.key;
+            String enc = jweHeader.getEncryptionAlgorithm();
+            if (!Strings.hasText(enc)) {
+                throw new MalformedJwtException(MISSING_ENC_MSG);
+            }
+            final AeadAlgorithm encAlg = this.encAlgs.apply(jweHeader);
+            Assert.stateNotNull(encAlg, "JWE Encryption Algorithm cannot be null.");
 
-            if (key == null) { //fall back to keyBytes
+            @SuppressWarnings("rawtypes") final KeyAlgorithm keyAlg = this.keyAlgs.apply(jweHeader);
+            Assert.stateNotNull(keyAlg, "JWE Key Algorithm cannot be null.");
 
-                byte[] keyBytes = this.keyBytes;
+            Key key = this.keyLocator.locate(jweHeader);
+            if (key == null) {
+                String msg = "Cannot decrypt JWE payload: unable to locate key for JWE with header: " + jweHeader;
+                throw new UnsupportedJwtException(msg);
+            }
+            if (key instanceof PublicKey) {
+                throw new InvalidKeyException(PUB_KEY_DECRYPT_MSG);
+            }
 
-                if (Objects.isEmpty(keyBytes) && signingKeyResolver != null) { //use the signingKeyResolver
-                    if (claims != null) {
-                        key = signingKeyResolver.resolveSigningKey(jwsHeader, claims);
-                    } else {
-                        key = signingKeyResolver.resolveSigningKey(jwsHeader, payload);
+            // extract key-specific provider if necessary;
+            Provider provider = ProviderKey.getProvider(key, this.provider);
+            key = ProviderKey.getKey(key); // this must be called after ProviderKey.getProvider
+            DecryptionKeyRequest<Key> request =
+                    new DefaultDecryptionKeyRequest<>(cekBytes, provider, null, jweHeader, encAlg, key);
+            final SecretKey cek = keyAlg.getDecryptionKey(request);
+            if (cek == null) {
+                String msg = "The '" + keyAlg.getId() + "' JWE key algorithm did not return a decryption key. " +
+                        "Unable to perform '" + encAlg.getId() + "' decryption.";
+                throw new IllegalStateException(msg);
+            }
+
+            // During decryption, the available Provider applies to the KeyAlgorithm, not the AeadAlgorithm, mostly
+            // because all JVMs support the standard AeadAlgorithms (especially with BouncyCastle in the classpath).
+            // As such, the provider here is intentionally omitted (null):
+            // TODO: add encProvider(Provider) builder method that applies to this request only?
+            InputStream ciphertext = payload.toInputStream();
+            ByteArrayOutputStream plaintext = new ByteArrayOutputStream(8192);
+            DecryptAeadRequest dreq = new DefaultDecryptAeadRequest(ciphertext, cek, aad, iv, digest);
+            encAlg.decrypt(dreq, plaintext);
+            payload = new Payload(plaintext.toByteArray(), header.getContentType());
+
+            integrityVerified = true; // AEAD performs integrity verification, so no exception = verified
+
+        } else if (hasDigest && this.signingKeyResolver == null) { //TODO: for 1.0, remove the == null check
+            // not using a signing key resolver, so we can verify the signature before reading the payload, which is
+            // always safer:
+            JwsHeader jwsHeader = Assert.stateIsInstance(JwsHeader.class, header, "Not a JwsHeader. ");
+            digest = verifySignature(tokenized, jwsHeader, alg, new LocatingKeyResolver(this.keyLocator), null, payload);
+            integrityVerified = true; // no exception means signature verified
+        }
+
+        final CompressionAlgorithm compressionAlgorithm = zipAlgs.apply(header);
+        if (compressionAlgorithm != null) {
+            if (!integrityVerified) {
+                if (!payloadBase64UrlEncoded) {
+                    String msg = String.format(B64_DECOMPRESSION_MSG, compressionAlgorithm.getId());
+                    throw new UnsupportedJwtException(msg);
+                } else if (!unsecuredDecompression) {
+                    String msg = String.format(UNPROTECTED_DECOMPRESSION_MSG, compressionAlgorithm.getId());
+                    throw new UnsupportedJwtException(msg);
+                }
+            }
+            payload = payload.decompress(compressionAlgorithm);
+        }
+
+        Claims claims = null;
+        byte[] payloadBytes = payload.getBytes();
+        if (payload.isConsumable()) {
+            InputStream in = null;
+            try {
+                in = payload.toInputStream();
+
+                if (!hasContentType(header)) {   // If there is a content type set, then the application using JJWT is expected
+                    //                          to convert the byte payload themselves based on this content type
+                    //                          https://www.rfc-editor.org/rfc/rfc7515.html#section-4.1.10 :
+                    //
+                    //                          "This parameter is ignored by JWS implementations; any processing of this
+                    //                          parameter is performed by the JWS application."
+                    //
+                    Map<String, ?> claimsMap = null;
+                    try {
+                        // if deserialization fails, we'll need to rewind to convert to a byte array.  So if
+                        // mark/reset isn't possible, we'll need to buffer:
+                        if (!in.markSupported()) {
+                            in = new BufferedInputStream(in);
+                            in.mark(0);
+                        }
+                        claimsMap = deserialize(new UncloseableInputStream(in) /* Don't close in case we need to rewind */, "claims");
+                    } catch (DeserializationException |
+                             MalformedJwtException ignored) { // not JSON, treat it as a byte[]
+//                String msg = "Invalid claims: " + e.getMessage();
+//                throw new MalformedJwtException(msg, e);
+                    } finally {
+                        Streams.reset(in);
+                    }
+                    if (claimsMap != null) {
+                        try {
+                            claims = new DefaultClaims(claimsMap);
+                        } catch (Throwable t) {
+                            String msg = "Invalid claims: " + t.getMessage();
+                            throw new MalformedJwtException(msg);
+                        }
                     }
                 }
-
-                if (!Objects.isEmpty(keyBytes)) {
-
-                    Assert.isTrue(algorithm.isHmac(),
-                        "Key bytes can only be specified for HMAC signatures. Please specify a PublicKey or PrivateKey instance.");
-
-                    key = new SecretKeySpec(keyBytes, algorithm.getJcaName());
+                if (claims == null) {
+                    // consumable, but not claims, so convert to byte array:
+                    payloadBytes = Streams.bytes(in, "Unable to convert payload to byte array.");
                 }
+            } finally { // always ensure closed per https://github.com/jwtk/jjwt/issues/949
+                Objects.nullSafeClose(in);
             }
+        }
 
-            Assert.notNull(key, "A signing key must be specified if the specified JWT is digitally signed.");
+        // =============== Post-SKR Signature Check =================
+        if (hasDigest && signingKeyResolver != null) { // TODO: remove for 1.0
+            // A SigningKeyResolver has been configured, and due to it's API, we have to verify the signature after
+            // parsing the body.  This can be a security risk, so it needs to be removed before 1.0
+            JwsHeader jwsHeader = Assert.stateIsInstance(JwsHeader.class, header, "Not a JwsHeader. ");
+            digest = verifySignature(tokenized, jwsHeader, alg, this.signingKeyResolver, claims, payload);
+            //noinspection UnusedAssignment
+            integrityVerified = true; // no exception means verified successfully
+        }
 
-            //re-create the jwt part without the signature.  This is what needs to be signed for verification:
-            String jwtWithoutSignature = base64UrlEncodedHeader + SEPARATOR_CHAR + base64UrlEncodedPayload;
-
-            JwtSignatureValidator validator;
-            try {
-                algorithm.assertValidVerificationKey(key); //since 0.10.0: https://github.com/jwtk/jjwt/issues/334
-                validator = createSignatureValidator(algorithm, key);
-            } catch (WeakKeyException e) {
-                throw e;
-            } catch (InvalidKeyException | IllegalArgumentException e) {
-                String algName = algorithm.getValue();
-                String msg = "The parsed JWT indicates it was signed with the " + algName + " signature " +
-                    "algorithm, but the specified signing key of type " + key.getClass().getName() +
-                    " may not be used to validate " + algName + " signatures.  Because the specified " +
-                    "signing key reflects a specific and expected algorithm, and the JWT does not reflect " +
-                    "this algorithm, it is likely that the JWT was not expected and therefore should not be " +
-                    "trusted.  Another possibility is that the parser was configured with the incorrect " +
-                    "signing key, but this cannot be assumed for security reasons.";
-                throw new UnsupportedJwtException(msg, e);
-            }
-
-            if (!validator.isValid(jwtWithoutSignature, base64UrlEncodedDigest)) {
-                String msg = "JWT signature does not match locally computed signature. JWT validity cannot be " +
-                    "asserted and should not be trusted.";
-                throw new SignatureException(msg);
-            }
+        Jwt<?, ?> jwt;
+        Object body = claims != null ? claims : payloadBytes;
+        if (header instanceof JweHeader) {
+            jwt = new DefaultJwe<>((JweHeader) header, body, iv, digest);
+        } else if (hasDigest) {
+            JwsHeader jwsHeader = Assert.isInstanceOf(JwsHeader.class, header, "JwsHeader required.");
+            jwt = new DefaultJws<>(jwsHeader, body, digest, base64UrlDigest.toString());
+        } else {
+            //noinspection rawtypes
+            jwt = new DefaultJwt(header, body);
         }
 
         final boolean allowSkew = this.allowedClockSkewMillis > 0;
@@ -417,43 +623,43 @@ public class NoExpirationJwtParser implements JwtParser {
             final Date now = this.clock.now();
             long nowTime = now.getTime();
 
-            //https://tools.ietf.org/html/draft-ietf-oauth-json-web-token-30#section-4.1.4
-            //token MUST NOT be accepted on or after any specified exp time:
-            /*Date exp = claims.getExpiration();
+            // https://www.rfc-editor.org/rfc/rfc7519.html#section-4.1.4
+            // token MUST NOT be accepted on or after any specified exp time:
+            /**
+            Date exp = claims.getExpiration();
             if (exp != null) {
 
                 long maxTime = nowTime - this.allowedClockSkewMillis;
                 Date max = allowSkew ? new Date(maxTime) : now;
                 if (max.after(exp)) {
-                    String expVal = DateFormats.formatIso8601(exp, false);
-                    String nowVal = DateFormats.formatIso8601(now, false);
+                    String expVal = DateFormats.formatIso8601(exp, true);
+                    String nowVal = DateFormats.formatIso8601(now, true);
 
-                    long differenceMillis = maxTime - exp.getTime();
+                    long differenceMillis = nowTime - exp.getTime();
 
-                    String msg = "JWT expired at " + expVal + ". Current time: " + nowVal + ", a difference of " +
-                        differenceMillis + " milliseconds.  Allowed clock skew: " +
-                        this.allowedClockSkewMillis + " milliseconds.";
+                    String msg = "JWT expired " + differenceMillis + " milliseconds ago at " + expVal + ". " +
+                            "Current time: " + nowVal + ". Allowed clock skew: " +
+                            this.allowedClockSkewMillis + " milliseconds.";
                     throw new ExpiredJwtException(header, claims, msg);
                 }
             }*/
 
-            //https://tools.ietf.org/html/draft-ietf-oauth-json-web-token-30#section-4.1.5
-            //token MUST NOT be accepted before any specified nbf time:
+            // https://www.rfc-editor.org/rfc/rfc7519.html#section-4.1.5
+            // token MUST NOT be accepted before any specified nbf time:
             Date nbf = claims.getNotBefore();
             if (nbf != null) {
 
                 long minTime = nowTime + this.allowedClockSkewMillis;
                 Date min = allowSkew ? new Date(minTime) : now;
                 if (min.before(nbf)) {
-                    String nbfVal = DateFormats.formatIso8601(nbf, false);
-                    String nowVal = DateFormats.formatIso8601(now, false);
+                    String nbfVal = DateFormats.formatIso8601(nbf, true);
+                    String nowVal = DateFormats.formatIso8601(now, true);
 
-                    long differenceMillis = nbf.getTime() - minTime;
+                    long differenceMillis = nbf.getTime() - nowTime;
 
-                    String msg = "JWT must not be accepted before " + nbfVal + ". Current time: " + nowVal +
-                        ", a difference of " +
-                        differenceMillis + " milliseconds.  Allowed clock skew: " +
-                        this.allowedClockSkewMillis + " milliseconds.";
+                    String msg = "JWT early by " + differenceMillis + " milliseconds before " + nbfVal +
+                            ". Current time: " + nowVal + ". Allowed clock skew: " +
+                            this.allowedClockSkewMillis + " milliseconds.";
                     throw new PrematureJwtException(header, claims, msg);
                 }
             }
@@ -461,13 +667,7 @@ public class NoExpirationJwtParser implements JwtParser {
             validateExpectedClaims(header, claims);
         }
 
-        Object body = claims != null ? claims : payload;
-
-        if (base64UrlEncodedDigest != null) {
-            return new DefaultJws<>((JwsHeader) header, body, base64UrlEncodedDigest);
-        } else {
-            return new DefaultJwt<>(header, body);
-        }
+        return jwt;
     }
 
     /**
@@ -482,9 +682,11 @@ public class NoExpirationJwtParser implements JwtParser {
 
     private void validateExpectedClaims(Header header, Claims claims) {
 
-        for (String expectedClaimName : expectedClaims.keySet()) {
+        final Claims expected = expectedClaims.build();
 
-            Object expectedClaimValue = normalize(expectedClaims.get(expectedClaimName));
+        for (String expectedClaimName : expected.keySet()) {
+
+            Object expectedClaimValue = normalize(expected.get(expectedClaimName));
             Object actualClaimValue = normalize(claims.get(expectedClaimName));
 
             if (expectedClaimValue instanceof Date) {
@@ -492,124 +694,164 @@ public class NoExpirationJwtParser implements JwtParser {
                     actualClaimValue = claims.get(expectedClaimName, Date.class);
                 } catch (Exception e) {
                     String msg = "JWT Claim '" + expectedClaimName + "' was expected to be a Date, but its value " +
-                        "cannot be converted to a Date using current heuristics.  Value: " + actualClaimValue;
-                    throw new IncorrectClaimException(header, claims, msg);
+                            "cannot be converted to a Date using current heuristics.  Value: " + actualClaimValue;
+                    throw new IncorrectClaimException(header, claims, expectedClaimName, expectedClaimValue, msg);
                 }
             }
-
-            InvalidClaimException invalidClaimException = null;
 
             if (actualClaimValue == null) {
-
-                String msg = String.format(ClaimJwtException.MISSING_EXPECTED_CLAIM_MESSAGE_TEMPLATE,
-                    expectedClaimName, expectedClaimValue);
-
-                invalidClaimException = new MissingClaimException(header, claims, msg);
-
+                boolean collection = expectedClaimValue instanceof Collection;
+                String msg = "Missing '" + expectedClaimName + "' claim. Expected value";
+                if (collection) {
+                    msg += "s: " + expectedClaimValue;
+                } else {
+                    msg += ": " + expectedClaimValue;
+                }
+                throw new MissingClaimException(header, claims, expectedClaimName, expectedClaimValue, msg);
+            } else if (expectedClaimValue instanceof Collection) {
+                Collection<?> expectedValues = (Collection<?>) expectedClaimValue;
+                Collection<?> actualValues = actualClaimValue instanceof Collection ? (Collection<?>) actualClaimValue :
+                        Collections.setOf(actualClaimValue);
+                for (Object expectedValue : expectedValues) {
+                    if (!Collections.contains(actualValues.iterator(), expectedValue)) {
+                        String msg = String.format(MISSING_EXPECTED_CLAIM_VALUE_MESSAGE_TEMPLATE,
+                                expectedValue, expectedClaimName, actualValues);
+                        throw new IncorrectClaimException(header, claims, expectedClaimName, expectedClaimValue, msg);
+                    }
+                }
             } else if (!expectedClaimValue.equals(actualClaimValue)) {
-
-                String msg = String.format(ClaimJwtException.INCORRECT_EXPECTED_CLAIM_MESSAGE_TEMPLATE,
-                    expectedClaimName, expectedClaimValue, actualClaimValue);
-
-                invalidClaimException = new IncorrectClaimException(header, claims, msg);
-            }
-
-            if (invalidClaimException != null) {
-                invalidClaimException.setClaimName(expectedClaimName);
-                invalidClaimException.setClaimValue(expectedClaimValue);
-                throw invalidClaimException;
+                String msg = String.format(INCORRECT_EXPECTED_CLAIM_MESSAGE_TEMPLATE,
+                        expectedClaimName, expectedClaimValue, actualClaimValue);
+                throw new IncorrectClaimException(header, claims, expectedClaimName, expectedClaimValue, msg);
             }
         }
     }
 
-    /*
-     * @since 0.5 mostly to allow testing overrides
-     */
-    protected JwtSignatureValidator createSignatureValidator(SignatureAlgorithm alg, Key key) {
-        return new DefaultJwtSignatureValidator(alg, key, base64UrlDecoder);
+    @SuppressWarnings("deprecation")
+    @Override
+    public <T> T parse(CharSequence compact, JwtHandler<T> handler) {
+        return parse(compact, Payload.EMPTY).accept(handler);
     }
 
-    @Override
-    public <T> T parse(String compact, JwtHandler<T> handler)
-        throws ExpiredJwtException, MalformedJwtException, SignatureException {
-        Assert.notNull(handler, "JwtHandler argument cannot be null.");
+    private Jwt<?, ?> parse(CharSequence compact, Payload unencodedPayload) {
         Assert.hasText(compact, "JWT String argument cannot be null or empty.");
+        return parse(new CharSequenceReader(compact), unencodedPayload);
+    }
 
-        Jwt jwt = parse(compact);
+    @Override
+    public Jwt<Header, byte[]> parseContentJwt(CharSequence jwt) {
+        return parse(jwt).accept(Jwt.UNSECURED_CONTENT);
+    }
 
-        if (jwt instanceof Jws) {
-            Jws jws = (Jws) jwt;
-            Object body = jws.getBody();
-            if (body instanceof Claims) {
-                return handler.onClaimsJws((Jws<Claims>) jws);
-            } else {
-                return handler.onPlaintextJws((Jws<String>) jws);
-            }
-        } else {
-            Object body = jwt.getBody();
-            if (body instanceof Claims) {
-                return handler.onClaimsJwt((Jwt<Header, Claims>) jwt);
-            } else {
-                return handler.onPlaintextJwt((Jwt<Header, String>) jwt);
-            }
+    @Override
+    public Jwt<Header, Claims> parseClaimsJwt(CharSequence jwt) {
+        return parse(jwt).accept(Jwt.UNSECURED_CLAIMS);
+    }
+
+    @Override
+    public Jws<byte[]> parseContentJws(CharSequence jws) {
+        return parseSignedContent(jws);
+    }
+
+    @Override
+    public Jws<Claims> parseClaimsJws(CharSequence jws) {
+        return parseSignedClaims(jws);
+    }
+
+    @Override
+    public Jwt<Header, byte[]> parseUnsecuredContent(CharSequence jwt) throws JwtException, IllegalArgumentException {
+        return parse(jwt).accept(Jwt.UNSECURED_CONTENT);
+    }
+
+    @Override
+    public Jwt<Header, Claims> parseUnsecuredClaims(CharSequence jwt) throws JwtException, IllegalArgumentException {
+        return parse(jwt).accept(Jwt.UNSECURED_CLAIMS);
+    }
+
+    @Override
+    public Jws<byte[]> parseSignedContent(CharSequence compact) {
+        return parse(compact).accept(Jws.CONTENT);
+    }
+
+    private Jws<byte[]> parseSignedContent(CharSequence jws, Payload unencodedPayload) {
+        return parse(jws, unencodedPayload).accept(Jws.CONTENT);
+    }
+
+    @Override
+    public Jws<Claims> parseSignedClaims(CharSequence compact) {
+        return parse(compact).accept(Jws.CLAIMS);
+    }
+
+    private Jws<Claims> parseSignedClaims(CharSequence jws, Payload unencodedPayload) {
+        unencodedPayload.setClaimsExpected(true);
+        return parse(jws, unencodedPayload).accept(Jws.CLAIMS);
+    }
+
+    @Override
+    public Jws<byte[]> parseSignedContent(CharSequence jws, byte[] unencodedPayload) {
+        Assert.notEmpty(unencodedPayload, "unencodedPayload argument cannot be null or empty.");
+        return parseSignedContent(jws, new Payload(unencodedPayload, null));
+    }
+
+    private static Payload payloadFor(InputStream in) {
+        if (in instanceof BytesInputStream) {
+            byte[] data = Streams.bytes(in, "Unable to obtain payload InputStream bytes.");
+            return new Payload(data, null);
         }
+        //if (in.markSupported()) in.mark(0);
+        return new Payload(in, null);
     }
 
     @Override
-    public Jwt<Header, String> parsePlaintextJwt(String plaintextJwt) {
-        return parse(plaintextJwt, new JwtHandlerAdapter<Jwt<Header, String>>() {
-            @Override
-            public Jwt<Header, String> onPlaintextJwt(Jwt<Header, String> jwt) {
-                return jwt;
-            }
-        });
+    public Jws<byte[]> parseSignedContent(CharSequence jws, InputStream unencodedPayload) {
+        Assert.notNull(unencodedPayload, "unencodedPayload InputStream cannot be null.");
+        return parseSignedContent(jws, payloadFor(unencodedPayload));
     }
 
     @Override
-    public Jwt<Header, Claims> parseClaimsJwt(String claimsJwt) {
+    public Jws<Claims> parseSignedClaims(CharSequence jws, byte[] unencodedPayload) {
+        Assert.notEmpty(unencodedPayload, "unencodedPayload argument cannot be null or empty.");
+        return parseSignedClaims(jws, new Payload(unencodedPayload, null));
+    }
+
+    @Override
+    public Jws<Claims> parseSignedClaims(CharSequence jws, InputStream unencodedPayload) {
+        Assert.notNull(unencodedPayload, "unencodedPayload InputStream cannot be null.");
+        byte[] bytes = Streams.bytes(unencodedPayload,
+                "Unable to obtain Claims bytes from unencodedPayload InputStream");
+        return parseSignedClaims(jws, new Payload(bytes, null));
+    }
+
+    @Override
+    public Jwe<byte[]> parseEncryptedContent(CharSequence compact) throws JwtException {
+        return parse(compact).accept(Jwe.CONTENT);
+    }
+
+    @Override
+    public Jwe<Claims> parseEncryptedClaims(CharSequence compact) throws JwtException {
+        return parse(compact).accept(Jwe.CLAIMS);
+    }
+
+    protected byte[] decode(CharSequence base64UrlEncoded, String name) {
         try {
-            return parse(claimsJwt, new JwtHandlerAdapter<Jwt<Header, Claims>>() {
-                @Override
-                public Jwt<Header, Claims> onClaimsJwt(Jwt<Header, Claims> jwt) {
-                    return jwt;
-                }
-            });
-        } catch (IllegalArgumentException iae) {
-            throw new UnsupportedJwtException("Signed JWSs are not supported.", iae);
+            InputStream decoding = this.decoder.decode(Streams.of(Strings.utf8(base64UrlEncoded)));
+            return Streams.bytes(decoding, "Unable to Base64Url-decode input.");
+        } catch (Throwable t) {
+            // Don't disclose potentially-sensitive information per https://github.com/jwtk/jjwt/issues/824:
+            String value = "payload".equals(name) ? RedactedSupplier.REDACTED_VALUE : base64UrlEncoded.toString();
+            String msg = "Invalid Base64Url " + name + ": " + value;
+            throw new MalformedJwtException(msg, t);
         }
     }
 
-    @Override
-    public Jws<String> parsePlaintextJws(String plaintextJws) {
+    protected Map<String, ?> deserialize(InputStream in, final String name) {
         try {
-            return parse(plaintextJws, new JwtHandlerAdapter<Jws<String>>() {
-                @Override
-                public Jws<String> onPlaintextJws(Jws<String> jws) {
-                    return jws;
-                }
-            });
-        } catch (IllegalArgumentException iae) {
-            throw new UnsupportedJwtException("Signed JWSs are not supported.", iae);
+            Reader reader = Streams.reader(in);
+            JsonObjectDeserializer deserializer = new JsonObjectDeserializer(this.deserializer, name);
+            return deserializer.apply(reader);
+        } finally {
+            Objects.nullSafeClose(in);
         }
     }
 
-    @Override
-    public Jws<Claims> parseClaimsJws(String claimsJws) {
-        return parse(claimsJws, new JwtHandlerAdapter<Jws<Claims>>() {
-            @Override
-            public Jws<Claims> onClaimsJws(Jws<Claims> jws) {
-                return jws;
-            }
-        });
-    }
-
-    @SuppressWarnings("unchecked")
-    protected Map<String, ?> readValue(String val) {
-        try {
-            byte[] bytes = val.getBytes(Strings.UTF_8);
-            return deserializer.deserialize(bytes);
-        } catch (DeserializationException e) {
-            throw new MalformedJwtException("Unable to read JSON value: " + val, e);
-        }
-    }
 }
