@@ -17,7 +17,7 @@ package io.jsonwebtoken;
 
 import java.util.Date;
 
-import com.github.hiwepy.jwt.time.JwtTimeProvider;
+import io.github.hiwepy.jwt.time.JwtTimeProvider;
 
 import io.jsonwebtoken.Clock;
 
