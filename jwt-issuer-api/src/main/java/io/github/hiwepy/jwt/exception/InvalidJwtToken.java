@@ -1,4 +1,4 @@
-package io.github.hiwepy.jwt.exception;
+package io.github.easy4j.jwt.exception;
 
 @SuppressWarnings("serial")
 public class InvalidJwtToken extends JwtException {

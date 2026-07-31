@@ -1,4 +1,4 @@
-package io.github.hiwepy.jwt.utils;
+package io.github.easy4j.jwt.utils;
 
 import java.io.IOException;
 import java.io.InputStream;

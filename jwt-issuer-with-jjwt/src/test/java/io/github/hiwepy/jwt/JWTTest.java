@@ -16,7 +16,7 @@
 /**
  * 
  */
-package io.github.hiwepy.jwt;
+package io.github.easy4j.jwt;
 
 import java.util.Base64;
 import java.util.HashMap;
@@ -27,8 +27,8 @@ import javax.crypto.SecretKey;
 
 import org.junit.Test;
 
-import io.github.hiwepy.jwt.utils.JJwtUtils;
-import io.github.hiwepy.jwt.utils.SecretKeyUtils;
+import io.github.easy4j.jwt.utils.JJwtUtils;
+import io.github.easy4j.jwt.utils.SecretKeyUtils;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.CompressionCodecs;

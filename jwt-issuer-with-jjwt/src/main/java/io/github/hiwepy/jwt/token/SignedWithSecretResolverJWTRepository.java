@@ -13,7 +13,7 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package io.github.hiwepy.jwt.token;
+package io.github.easy4j.jwt.token;
 
 import java.security.Key;
 import java.text.ParseException;
@@ -27,13 +27,13 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.github.hiwepy.jwt.JwtPayload;
-import io.github.hiwepy.jwt.exception.ExpiredJwtException;
-import io.github.hiwepy.jwt.exception.IncorrectJwtException;
-import io.github.hiwepy.jwt.exception.InvalidJwtToken;
-import io.github.hiwepy.jwt.exception.JwtException;
-import io.github.hiwepy.jwt.exception.NotObtainedJwtException;
-import io.github.hiwepy.jwt.utils.JJwtUtils;
+import io.github.easy4j.jwt.JwtPayload;
+import io.github.easy4j.jwt.exception.ExpiredJwtException;
+import io.github.easy4j.jwt.exception.IncorrectJwtException;
+import io.github.easy4j.jwt.exception.InvalidJwtToken;
+import io.github.easy4j.jwt.exception.JwtException;
+import io.github.easy4j.jwt.exception.NotObtainedJwtException;
+import io.github.easy4j.jwt.utils.JJwtUtils;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Clock;

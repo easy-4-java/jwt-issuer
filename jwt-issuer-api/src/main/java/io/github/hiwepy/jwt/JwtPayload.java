@@ -13,7 +13,7 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package io.github.hiwepy.jwt;
+package io.github.easy4j.jwt;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -29,7 +29,7 @@ import java.util.stream.Stream;
 import org.apache.commons.collections4.MapUtils;
 
 import com.alibaba.fastjson.JSONObject;
-import io.github.hiwepy.jwt.utils.StringUtils;
+import io.github.easy4j.jwt.utils.StringUtils;
 
 /**
  * TODO
