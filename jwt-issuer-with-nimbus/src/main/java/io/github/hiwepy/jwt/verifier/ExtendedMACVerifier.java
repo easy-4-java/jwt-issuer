@@ -1,10 +1,10 @@
-package io.github.hiwepy.jwt.verifier;
+package io.github.easy4j.jwt.verifier;
 
 import java.util.Date;
 
-import io.github.hiwepy.jwt.exception.ExpiredJwtException;
-import io.github.hiwepy.jwt.exception.NotObtainedJwtException;
-import io.github.hiwepy.jwt.time.JwtTimeProvider;
+import io.github.easy4j.jwt.exception.ExpiredJwtException;
+import io.github.easy4j.jwt.exception.NotObtainedJwtException;
+import io.github.easy4j.jwt.time.JwtTimeProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

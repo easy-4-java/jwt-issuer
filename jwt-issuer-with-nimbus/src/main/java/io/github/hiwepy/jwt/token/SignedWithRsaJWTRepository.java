@@ -13,20 +13,20 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package io.github.hiwepy.jwt.token;
+package io.github.easy4j.jwt.token;
 
 import java.text.ParseException;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
-import io.github.hiwepy.jwt.JwtPayload;
-import io.github.hiwepy.jwt.exception.IncorrectJwtException;
-import io.github.hiwepy.jwt.exception.InvalidJwtToken;
-import io.github.hiwepy.jwt.exception.JwtException;
-import io.github.hiwepy.jwt.time.JwtTimeProvider;
-import io.github.hiwepy.jwt.utils.NimbusdsUtils;
-import io.github.hiwepy.jwt.verifier.ExtendedRSASSAVerifier;
+import io.github.easy4j.jwt.JwtPayload;
+import io.github.easy4j.jwt.exception.IncorrectJwtException;
+import io.github.easy4j.jwt.exception.InvalidJwtToken;
+import io.github.easy4j.jwt.exception.JwtException;
+import io.github.easy4j.jwt.time.JwtTimeProvider;
+import io.github.easy4j.jwt.utils.NimbusdsUtils;
+import io.github.easy4j.jwt.verifier.ExtendedRSASSAVerifier;
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;

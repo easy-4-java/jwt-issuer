@@ -13,7 +13,7 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package io.github.hiwepy.jwt.time;
+package io.github.easy4j.jwt.time;
 
 /**
  * 时间提供者，解决节点时间不同步问题

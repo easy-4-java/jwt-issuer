@@ -1,9 +1,9 @@
-package io.github.hiwepy.jwt.token;
+package io.github.easy4j.jwt.token;
 
 import java.util.Map;
 
-import io.github.hiwepy.jwt.exception.JwtException;
-import io.github.hiwepy.jwt.JwtPayload;
+import io.github.easy4j.jwt.exception.JwtException;
+import io.github.easy4j.jwt.JwtPayload;
 
 public interface JwtKeyPairRepository<S, E> {
 
