@@ -13,7 +13,7 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package io.github.hiwepy.jwt.utils;
+package io.github.easy4j.jwt.utils;
 
 public class StringUtils extends org.apache.commons.lang3.StringUtils{
 

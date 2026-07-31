@@ -13,7 +13,7 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package io.github.hiwepy.jwt.utils;
+package io.github.easy4j.jwt.utils;
 
 import java.security.Key;
 import java.text.ParseException;
@@ -26,7 +26,7 @@ import java.util.Map.Entry;
 
 import org.apache.commons.lang3.StringUtils;
 
-import io.github.hiwepy.jwt.JwtPayload;
+import io.github.easy4j.jwt.JwtPayload;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.CompressionCodecs;
