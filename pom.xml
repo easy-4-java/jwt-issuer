@@ -63,6 +63,7 @@
 						<defaultLibBundleDir>lib</defaultLibBundleDir>
 						<source>1.8</source>
 						<target>1.8</target>
+						<release>8</release>
 						<encoding>${project.build.sourceEncoding}</encoding>
 						<maxmem>512M</maxmem>
 					</configuration>
