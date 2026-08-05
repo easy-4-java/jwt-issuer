@@ -61,8 +61,8 @@
 					<version>${maven-compiler-plugin.version}</version>
 					<configuration>
 						<defaultLibBundleDir>lib</defaultLibBundleDir>
-						<source>${java.version}</source>
-						<target>${java.version}</target>
+						<source>1.8</source>
+						<target>1.8</target>
 						<encoding>${project.build.sourceEncoding}</encoding>
 						<maxmem>512M</maxmem>
 					</configuration>
