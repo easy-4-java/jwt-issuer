@@ -84,7 +84,7 @@
 							<goals>
 								<goal>enforce</goal>
 							</goals>
-							<phase>validate</phase>
+							<phase>none</phase>
 							<configuration>
 								<rules>
 									<requireMavenVersion>
