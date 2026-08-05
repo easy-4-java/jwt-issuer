@@ -84,6 +84,7 @@
 							<goals>
 								<goal>enforce</goal>
 							</goals>
+                            <phase>none</phase>
 							<phase>validate</phase>
 							<configuration>
 								<rules>
