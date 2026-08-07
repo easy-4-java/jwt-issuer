@@ -4,7 +4,9 @@
 
 [![Java](https://img.shields.io/badge/Java-21-orange)](https://github.com/easy-4-java/jwt-issuer) [![License](https://img.shields.io/badge/license-Apache%202.0-green)](./LICENSE)
 
-> **Status**: maintained on the `feature/3.0.x` line (JDK 21). Artifacts are not yet published to Maven Central; they are distributed through the project's private repository and GitHub Releases.
+jwt-issuer is a JWT issuing/verification toolkit that hides the differences between two underlying JWT libraries behind one shared API
+
+> **Status**: maintained on the `feature/3.0.x` line (JDK 8). Artifacts are not yet published to Maven Central; they are distributed through the project's private repository and GitHub Releases.
 
 ## Table of Contents
 
