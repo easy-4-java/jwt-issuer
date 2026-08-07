@@ -81,9 +81,9 @@ public class NoExpirationJwtParser implements JwtParser {
     private Clock clock = DefaultClock.INSTANCE;
 
     private long allowedClockSkewMillis = 0;
-    
+
     public NoExpirationJwtParser() { }
-    
+
     NoExpirationJwtParser(SigningKeyResolver signingKeyResolver,
             Key key,
             byte[] keyBytes,
