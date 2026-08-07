@@ -79,7 +79,7 @@ public class SignedWithSecretResolverJWTRepository implements JwtKeyResolverRepo
 			return ret;
 		}
 		
-		JwtParserBuilder jwtParserBuilder = checkExpiry ? Jwts.parserBuilder() : JJwtUtils.parserBuilder();
+			JwtParserBuilder jwtParserBuilder = checkExpiry ? Jwts.parser() : JJwtUtils.parserBuilder();
 		// 时钟
 		jwtParserBuilder.setClock(clock)
 		// 签名Key解析器

@@ -17,7 +17,7 @@ package io.github.easy4j.jwt.utils;
 
 import java.security.Key;
 import java.text.ParseException;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -146,7 +146,7 @@ public class JJwtUtils {
 		payload.setExpiration(claims.getExpiration()); // 过期时间
 		payload.setNotBefore(claims.getNotBefore());
 		
-		payload.setAudience(Arrays.asList(claims.getAudience()));// 接收方
+		payload.setAudience(new ArrayList<>(claims.getAudience()));// 接收方
 		payload.setClaims(claims); // 访问主张
 		
 		return payload;
@@ -154,7 +154,7 @@ public class JJwtUtils {
 
 	public static Claims parseJWT(Key secretKey, String token) {
 		// 解析jwt串 :其中parseClaimsJws验证jwt字符串失败可能会抛出异常，需要捕获异常
-		Claims claims = Jwts.parserBuilder().setSigningKey(secretKey).build().parseClaimsJws(token).getBody();
+		Claims claims = Jwts.parser().setSigningKey(secretKey).build().parseClaimsJws(token).getBody();
 		return claims;
 	}
 
@@ -194,7 +194,7 @@ public class JJwtUtils {
 			}
 			refreshedToken = genAccessToken(secretKey, claims.getId(), claims.getSubject(),
 
-					claims.getIssuer(), claims.getAudience(), claimMap, access_token_expiration);
+						claims.getIssuer(), claims.getAudience().stream().findFirst().orElse(null), claimMap, access_token_expiration);
 		} catch (Exception e) {
 			refreshedToken = null;
 		}
