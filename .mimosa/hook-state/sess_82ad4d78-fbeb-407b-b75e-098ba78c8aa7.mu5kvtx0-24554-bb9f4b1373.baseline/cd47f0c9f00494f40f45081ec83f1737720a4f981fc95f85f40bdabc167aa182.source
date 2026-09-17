@@ -55,12 +55,11 @@ public class JWTTest {
 		
 
 		Map<String, Object> claims = new HashMap<String, Object>();
-		// roles/perms 契约为 RolePair 的 JSON 数组（见 JwtPayload#getRoles/getPerms），不能写逗号分隔裸串
-		claims.put("roles", "[{\"id\":\"1\",\"key\":\"admin\",\"value\":\"管理员\"},{\"id\":\"2\",\"key\":\"stu\",\"value\":\"学生\"}]");
-		claims.put("perms", "[{\"id\":\"1\",\"key\":\"user:del\",\"value\":\"删除用户\"}]");
+		claims.put("roles", "admin,stu");
+		claims.put("perms", "user:del");
 
-
-		String token1 = JJwtUtils.jwtBuilder(UUID.randomUUID().toString(), "Jwt测试1", "test1", "0001", claims, 1024L * 60)
+		
+		String token1 = JJwtUtils.jwtBuilder(UUID.randomUUID().toString(), "Jwt测试1", "test1", "0001", claims, 1024)
 				// 压缩，可选GZIP
 				.compressWith(CompressionCodecs.DEFLATE)
 				// 设置算法（必须）
@@ -107,9 +106,7 @@ public class JWTTest {
 		System.out.println(Base64.getEncoder().encodeToString(secretKey.getEncoded()));
 		
 		String token2 = JJwtUtils
-				.jwtBuilder(UUID.randomUUID().toString(), "Jwt测试2", "test2", "0002",
-						"[{\"id\":\"1\",\"key\":\"admin\",\"value\":\"管理员\"},{\"id\":\"2\",\"key\":\"stu\",\"value\":\"学生\"}]",
-						"[{\"id\":\"1\",\"key\":\"user:del\",\"value\":\"删除用户\"}]", 1024L * 60)
+				.jwtBuilder(UUID.randomUUID().toString(), "Jwt测试2", "test2", "0002", "admin,stu", "user:del", 1024)
 				// 压缩，可选GZIP
 				.compressWith(CompressionCodecs.DEFLATE)
 				// 设置算法（必须）

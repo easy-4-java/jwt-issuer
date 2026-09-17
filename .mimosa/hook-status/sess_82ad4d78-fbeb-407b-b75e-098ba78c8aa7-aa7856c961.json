@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "mimosa-hook-status/v1",
+  "recordedAt": "2026-09-17T13:44:14.045Z",
+  "sessionId": "sess_82ad4d78-fbeb-407b-b75e-098ba78c8aa7",
+  "event": "PostToolUse",
+  "toolName": "Edit",
+  "file": "jwt-issuer-with-jjwt/src/main/java/io/github/hiwepy/jwt/utils/JJwtUtils.java",
+  "outcome": "clear",
+  "coverage": "complete",
+  "findingCount": 0,
+  "durationMs": 4,
+  "hostState": "hook_complete",
+  "reportHint": ".mimosa/reports/"
+}

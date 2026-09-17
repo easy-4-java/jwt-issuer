@@ -42,7 +42,7 @@ import io.jsonwebtoken.lang.Classes;
  */
 public class JJwtUtils {
 
-	public static final String ROLE_REFRESH_TOKEN = "ROLE_" + "REFRESH_TOKEN";
+	public static final String ROLE_REFRESH_TOKEN = "ROLE_REFRESH_TOKEN";
 	public static final String CLAIM_KEY_USER_ID = "user_id";
 	public static final String CLAIM_KEY_AUTHORITIES = "scope";
 	public static final String CLAIM_KEY_ACCOUNT_ENABLED = "enabled";
@@ -131,12 +131,6 @@ public class JJwtUtils {
 		// 权限
 		if (StringUtils.isNoneBlank(permissions)) {
 			builder.claim("perms", permissions);
-		}
-		// 签发时间与过期时间：period 单位毫秒；缺失会导致签出永不失效的 Token
-		long currentTimeMillis = System.currentTimeMillis();
-		builder.setIssuedAt(new Date(currentTimeMillis));
-		if (period >= 0) {
-			builder.setExpiration(new Date(currentTimeMillis + period));
 		}
 		return builder;
 	}
