@@ -204,7 +204,7 @@
                         <skip>false</skip>
                         <skipTests>false</skipTests>
                         <forkMode>once</forkMode>
-                        <argLine>-Xmx1024m
+                        <argLine>@{jacocoArgLine} -Xmx1024m
 							-Dfile.encoding=UTF-8</argLine>
                         <additionalClasspathElements>
                             <additionalClasspathElement>${basedir}/target/test-classes</additionalClasspathElement>
@@ -288,6 +288,7 @@
                 <executions>
                     <execution>
                         <id>prepare-agent</id>
+                        <configuration><propertyName>jacocoArgLine</propertyName></configuration>
                         <goals>
                             <goal>prepare-agent</goal>
                         </goals>
@@ -502,6 +503,7 @@
 
     <!-- 版本属性定义：Java 版本、依赖版本与 Maven 插件版本统一管理 -->
     <properties>
+        <jacocoArgLine></jacocoArgLine>
         <java.version>17</java.version>
         <maven.compiler.release>17</maven.compiler.release>
         <maven.compiler.source>17</maven.compiler.source>
