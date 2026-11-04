@@ -1,144 +1,120 @@
-/*
- * Copyright (c) 2018, hiwepy (https://github.com/hiwepy).
- *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not
- * use this file except in compliance with the License. You may obtain a copy of
- * the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
- * License for the specific language governing permissions and limitations under
- * the License.
- */
-/**
- * 
- */
 package io.github.easy4j.jwt;
 
-import java.util.Base64;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import static org.junit.Assert.*;
+
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.Date;
 
 import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 
 import org.junit.Test;
 
 import io.github.easy4j.jwt.utils.JJwtUtils;
-import io.github.easy4j.jwt.utils.SecretKeyUtils;
-
 import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.CompressionCodecs;
+import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
-import io.jsonwebtoken.security.Keys;
+import io.jsonwebtoken.security.SignatureException;
 
-/**
- * TODO
- * 
- * @author <a href="https://github.com/loong10k">Loong Wan</a>
- */
+/** Offline utility contracts with a public test-only signing key. */
 public class JWTTest {
+    private static final SecretKey KEY = new SecretKeySpec(
+            "utility-test-key-0123456789abcdef".getBytes(StandardCharsets.US_ASCII), "HmacSHA256");
 
+    @Test
+    public void mapBuilderPreservesRegisteredAndCustomClaims() throws Exception {
+        long before = System.currentTimeMillis();
+        String token = JJwtUtils.jwtBuilder("id", "alice", "issuer", "audience",
+                Collections.singletonMap("scope", "read"), 60000).signWith(KEY).compact();
+        Claims claims = JJwtUtils.parseJWT(KEY, token);
+        assertEquals("id", claims.getId());
+        assertEquals("alice", claims.getSubject());
+        assertEquals("issuer", claims.getIssuer());
+        assertEquals("audience", claims.getAudience());
+        assertEquals("read", claims.get("scope"));
+        assertTrue(claims.getIssuedAt().getTime() >= before - 999);
+        assertEquals(60000, claims.getExpiration().getTime() - claims.getIssuedAt().getTime());
+        JwtPayload payload = JJwtUtils.payload(claims);
+        assertEquals("alice", payload.getSubject());
+        assertEquals("id", payload.getTokenId());
+        assertEquals(Collections.singletonList("audience"), payload.getAudience());
+        assertEquals(claims.getExpiration(), payload.getExpiration());
+        assertFalse(JJwtUtils.isTokenExpired(KEY, token));
+    }
 
-	@Test
-	public void applyToken1() throws Exception {
+    @Test
+    public void rolesBuilderSetsTtlAndRoundTripsStructuredRoles() throws Exception {
+        String roles = "[{\"id\":\"1\",\"key\":\"admin\",\"value\":\"Administrator\"}]";
+        String perms = "read,write";
+        Claims claims = JJwtUtils.parseJWT(KEY, JJwtUtils.jwtBuilder(
+                "id", "alice", "issuer", "audience", roles, perms, 60000).signWith(KEY).compact());
+        assertEquals(60000, claims.getExpiration().getTime() - claims.getIssuedAt().getTime());
+        assertEquals(roles, claims.get("roles"));
+        assertEquals(perms, claims.get("perms"));
+        JwtPayload payload = JJwtUtils.payload(claims);
+        assertEquals(1, payload.getRoles().size());
+        assertEquals(new java.util.HashSet<>(java.util.Arrays.asList("read", "write")), payload.getPerms());
+    }
 
-		System.out.println("//-----------------------------------------------------------");
+    @Test
+    public void negativePeriodExplicitlyOmitsExpirationInBothOverloads() {
+        assertNull(JJwtUtils.parseJWT(KEY, JJwtUtils.jwtBuilder(null, "alice", null, null,
+                (java.util.Map<String, Object>) null, -1).signWith(KEY).compact()).getExpiration());
+        assertNull(JJwtUtils.parseJWT(KEY, JJwtUtils.jwtBuilder(null, "alice", null, null,
+                null, null, -1).signWith(KEY).compact()).getExpiration());
+    }
 
-		// We need a signing key, so we'll create one just for this example. Usually
-		// the key would be read from your application configuration instead.
-		// Key key = Keys.secretKeyFor(SignatureAlgorithm.HS256);
-		SecretKey secretKey = Keys.secretKeyFor(SignatureAlgorithm.HS256);
-		
+    @Test
+    public void zeroPeriodSetsAnExpirationInsteadOfCreatingImmortalToken() {
+        // Inspect with the explicit no-expiry parser to avoid a wall-clock race at zero TTL.
+        Claims claims = JJwtUtils.parserBuilder().setSigningKey(KEY).build().parseClaimsJws(
+                JJwtUtils.jwtBuilder("id", "alice", "issuer", "audience", "[]", "[]", 0)
+                        .signWith(KEY).compact()).getBody();
+        assertNotNull(claims.getExpiration());
+        assertEquals(claims.getIssuedAt(), claims.getExpiration());
+    }
 
-		Map<String, Object> claims = new HashMap<String, Object>();
-		// roles/perms 契约为 RolePair 的 JSON 数组（见 JwtPayload#getRoles/getPerms），不能写逗号分隔裸串
-		claims.put("roles", "[{\"id\":\"1\",\"key\":\"admin\",\"value\":\"管理员\"},{\"id\":\"2\",\"key\":\"stu\",\"value\":\"学生\"}]");
-		claims.put("perms", "[{\"id\":\"1\",\"key\":\"user:del\",\"value\":\"删除用户\"}]");
+    @Test
+    public void parseRejectsWrongKeysAndExpiredTokens() {
+        String token = JJwtUtils.jwtBuilder("id", "alice", "issuer", "audience",
+                Collections.emptyMap(), 60000).signWith(KEY).compact();
+        SecretKey wrong = new SecretKeySpec("wrong-utility-key-0123456789abcdef".getBytes(StandardCharsets.US_ASCII), "HmacSHA256");
+        assertThrows(SignatureException.class, () -> JJwtUtils.parseJWT(wrong, token));
+        String expired = Jwts.builder().setSubject("alice").setExpiration(new Date(1000))
+                .signWith(KEY, SignatureAlgorithm.HS256).compact();
+        assertThrows(io.jsonwebtoken.ExpiredJwtException.class, () -> JJwtUtils.parseJWT(KEY, expired));
+    }
 
+    @Test
+    public void refreshPreservesIdentityAndCustomClaimsAndRejectsInvalidInput() {
+        JJwtUtils utils = new JJwtUtils();
+        String token = utils.genAccessToken(KEY, "id", "alice", "issuer", "audience",
+                Collections.singletonMap("scope", "read"), 60000);
+        assertTrue(utils.canTokenBeRefreshed(KEY, token, null));
+        assertFalse(utils.canTokenBeRefreshed(KEY, token, new Date(System.currentTimeMillis() + 60000)));
+        Claims refreshed = JJwtUtils.parseJWT(KEY, utils.refreshToken(KEY, token, 120000));
+        assertEquals("id", refreshed.getId());
+        assertEquals("alice", refreshed.getSubject());
+        assertEquals("read", refreshed.get("scope"));
+        assertEquals(120000, refreshed.getExpiration().getTime() - refreshed.getIssuedAt().getTime());
+        assertNull(utils.refreshToken(KEY, "invalid", 60000));
+        assertNull(utils.getUsernameFromToken(KEY, "invalid"));
+        assertNull(utils.getCreatedDateFromToken(KEY, "invalid"));
+        assertNull(JJwtUtils.getExpirationDateFromToken(KEY, "invalid"));
+        assertEquals(0, utils.getUserIdFromToken(KEY, "invalid"));
+    }
 
-		String token1 = JJwtUtils.jwtBuilder(UUID.randomUUID().toString(), "Jwt测试1", "test1", "0001", claims, 1024L * 60)
-				// 压缩，可选GZIP
-				.compressWith(CompressionCodecs.DEFLATE)
-				// 设置算法（必须）
-				.signWith(secretKey).compact();
-		System.out.println("token:" + token1);
-
-		Claims claims1 = JJwtUtils.parseJWT(secretKey, token1);
-		System.out.println("Audience:" + claims1.getAudience());
-		System.out.println("Id:" + claims1.getId());
-		System.out.println("Issuer:" + claims1.getIssuer());
-		System.out.println("Subject:" + claims1.getSubject());
-		System.out.println("Expiration:" + claims1.getExpiration());
-		System.out.println("IssuedAt:" + claims1.getIssuedAt());
-		System.out.println("NotBefore:" + claims1.getNotBefore());
-		System.out.println("roles:" + claims1.get("roles", String.class));
-		System.out.println("perms:" + claims1.get("perms", String.class));
-
-		JwtPayload jwtPlayload = JJwtUtils.payload(claims1);
-		
-		System.out.println("TokenId:" + jwtPlayload.getTokenId());
-		System.out.println("Audience:" + jwtPlayload.getAudience());
-		System.out.println("Issuer:" + jwtPlayload.getIssuer());
-		System.out.println("Subject:" + jwtPlayload.getSubject());
-		System.out.println("Expiration:" + jwtPlayload.getExpiration());
-		System.out.println("IssuedAt:" + jwtPlayload.getIssuedAt());
-		System.out.println("NotBefore:" + jwtPlayload.getNotBefore());
-		System.out.println("roles:" + jwtPlayload.getRoles());
-		System.out.println("perms:" + jwtPlayload.getPerms());
-
-		System.out.println("isTokenExpired:" + JJwtUtils.isTokenExpired(secretKey, token1));
-	}
-
-	private byte[] base64Secret = Base64.getDecoder().decode("6Tb9jCzN1jXppMrsLYfXbERiGiGp4nNtXuVdTGV9qN0=");
-	
-	
-	@Test
-	public void applyToken2() throws Exception {
-
-		
-		System.out.println("//-----------------------------------------------------------");
-		
-		// Key key = Keys.secretKeyFor(SignatureAlgorithm.HS256);
-		SecretKey secretKey = SecretKeyUtils.genSecretKey(base64Secret, "HmacSHA256");
-		System.out.println(Base64.getEncoder().encodeToString(secretKey.getEncoded()));
-		
-		String token2 = JJwtUtils
-				.jwtBuilder(UUID.randomUUID().toString(), "Jwt测试2", "test2", "0002",
-						"[{\"id\":\"1\",\"key\":\"admin\",\"value\":\"管理员\"},{\"id\":\"2\",\"key\":\"stu\",\"value\":\"学生\"}]",
-						"[{\"id\":\"1\",\"key\":\"user:del\",\"value\":\"删除用户\"}]", 1024L * 60)
-				// 压缩，可选GZIP
-				.compressWith(CompressionCodecs.DEFLATE)
-				// 设置算法（必须）
-				.signWith(secretKey).compact();
-		System.out.println("token:" + token2);
-
-		Claims claims2 = JJwtUtils.parseJWT(secretKey, token2);
-		System.out.println("Audience:" + claims2.getAudience());
-		System.out.println("Id:" + claims2.getId());
-		System.out.println("Issuer:" + claims2.getIssuer());
-		System.out.println("Subject:" + claims2.getSubject());
-		System.out.println("Expiration:" + claims2.getExpiration());
-		System.out.println("IssuedAt:" + claims2.getIssuedAt());
-		System.out.println("NotBefore:" + claims2.getNotBefore());
-		System.out.println("roles:" + claims2.get("roles", String.class));
-		System.out.println("perms:" + claims2.get("perms", String.class));
-
-		JwtPayload jwtPlayload2 = JJwtUtils.payload(claims2);
-		System.out.println("TokenId:" + jwtPlayload2.getTokenId());
-		System.out.println("Audience:" + jwtPlayload2.getAudience());
-		System.out.println("Issuer:" + jwtPlayload2.getIssuer());
-		System.out.println("Subject:" + jwtPlayload2.getSubject());
-		System.out.println("Expiration:" + jwtPlayload2.getExpiration());
-		System.out.println("IssuedAt:" + jwtPlayload2.getIssuedAt());
-		System.out.println("NotBefore:" + jwtPlayload2.getNotBefore());
-		System.out.println("roles:" + jwtPlayload2.getRoles());
-		System.out.println("perms:" + jwtPlayload2.getPerms());
-
-		System.out.println("isTokenExpired:" + JJwtUtils.isTokenExpired(secretKey, token2));
-
-	}
+    @Test
+    public void refreshTokenAndPasswordResetBoundaryHaveExplicitAssertions() {
+        JJwtUtils utils = new JJwtUtils();
+        String token = utils.genRefreshToken(KEY, "id", "alice", "issuer", "audience", Collections.emptyMap(), 60000);
+        assertEquals("alice", utils.getUsernameFromToken(KEY, token));
+        assertNotNull(utils.getCreatedDateFromToken(KEY, token));
+        assertNotNull(JJwtUtils.getExpirationDateFromToken(KEY, token));
+        Date created = new Date(1000);
+        assertFalse(JJwtUtils.isCreatedBeforeLastPasswordReset(created, null));
+        assertFalse(JJwtUtils.isCreatedBeforeLastPasswordReset(created, new Date(1000)));
+        assertTrue(JJwtUtils.isCreatedBeforeLastPasswordReset(created, new Date(1001)));
+    }
 }

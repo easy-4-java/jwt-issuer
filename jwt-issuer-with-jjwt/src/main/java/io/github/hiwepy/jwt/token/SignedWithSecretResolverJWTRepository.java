@@ -21,7 +21,7 @@ import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Objects;
 
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -64,21 +64,18 @@ import io.jsonwebtoken.security.SignatureException;
 public class SignedWithSecretResolverJWTRepository implements JwtKeyResolverRepository<Key> {
 	
 	private Logger logger = LoggerFactory.getLogger(getClass());
-	private long allowedClockSkewSeconds = -1;
-	private CompressionCodec compressWith = CompressionCodecs.DEFLATE;
-	private SigningKeyResolver signingKeyResolver;
-    private CompressionCodecResolver compressionCodecResolver;
-    private Clock clock = new JwtClock();
-    private static final Map<String, JwtParser> PARSER_CONTEXT = new ConcurrentHashMap<>();
+	private volatile long allowedClockSkewSeconds = -1;
+	private volatile CompressionCodec compressWith = CompressionCodecs.DEFLATE;
+	private volatile SigningKeyResolver signingKeyResolver;
+    private volatile CompressionCodecResolver compressionCodecResolver;
+    private volatile Clock clock = new JwtClock();
     
 	public JwtParser getJwtParser(SigningKeyResolver signingKeyResolver, boolean checkExpiry) {
 		
-		String key = String.format("%s-%s", signingKeyResolver.hashCode() , checkExpiry);
-		JwtParser ret = PARSER_CONTEXT.get(key);
-		if (ret != null) {
-			return ret;
-		}
-		
+        Objects.requireNonNull(signingKeyResolver, "signingKeyResolver");
+        // Parsers retain their key/resolver and configuration. Build per call so that
+        // unrelated keys, repository instances and later configuration changes cannot
+        // reuse an earlier verifier. No global cache retains key material or resolvers.
 		JwtParserBuilder jwtParserBuilder = checkExpiry ? Jwts.parserBuilder() : JJwtUtils.parserBuilder();
 		// 时钟
 		jwtParserBuilder.setClock(clock)
@@ -87,13 +84,12 @@ public class SignedWithSecretResolverJWTRepository implements JwtKeyResolverRepo
 		// 允许的时间误差
 		.setAllowedClockSkewSeconds(getAllowedClockSkewSeconds());
 		// 压缩方式解析器
-		if(null != getCompressionCodecResolver() ) {
-			jwtParserBuilder.setCompressionCodecResolver(getCompressionCodecResolver());
-		}
+        CompressionCodecResolver codecResolver = getCompressionCodecResolver();
+        if (codecResolver != null) {
+            jwtParserBuilder.setCompressionCodecResolver(codecResolver);
+        }
 		
-		ret = jwtParserBuilder.build();
-		PARSER_CONTEXT.put( key, ret);
-		return ret;
+		return jwtParserBuilder.build();
 	}
 	
 	
