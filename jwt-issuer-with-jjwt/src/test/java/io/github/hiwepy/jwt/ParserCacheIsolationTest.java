@@ -27,6 +27,17 @@ public class ParserCacheIsolationTest {
         String token = Jwts.builder().setSubject("test").setExpiration(new Date(1893456000000L)).signWith(first).compact();
         assertTrue(firstRepository.verify(token, true));
         assertThrows(io.jsonwebtoken.security.SignatureException.class, () -> secondRepository.verify(token, true));
+        String otherToken = Jwts.builder().setSubject("other").setExpiration(new Date(1893456000000L)).signWith(second).compact();
+        for (boolean expiry : new boolean[] {true, false}) {
+            assertTrue(firstRepository.verify(token, expiry));
+            assertEquals("test", firstRepository.getPlayload(token, expiry).getSubject());
+            assertThrows(io.jsonwebtoken.security.SignatureException.class, () -> secondRepository.verify(token, expiry));
+            assertThrows(io.jsonwebtoken.security.SignatureException.class, () -> secondRepository.getPlayload(token, expiry));
+            assertTrue(secondRepository.verify(otherToken, expiry));
+            assertEquals("other", secondRepository.getPlayload(otherToken, expiry).getSubject());
+            assertThrows(io.jsonwebtoken.security.SignatureException.class, () -> firstRepository.verify(otherToken, expiry));
+            assertThrows(io.jsonwebtoken.security.SignatureException.class, () -> firstRepository.getPlayload(otherToken, expiry));
+        }
     }
 
     private static io.jsonwebtoken.SigningKeyResolver fixedResolver(Key key) {
@@ -49,5 +60,47 @@ public class ParserCacheIsolationTest {
         String token = Jwts.builder().setSubject("test").setExpiration(new Date(1893456000000L)).signWith(first).compact();
         assertTrue(repository.verify(first, token, true));
         assertThrows(io.jsonwebtoken.security.SignatureException.class, () -> repository.verify(second, token, true));
+        String otherToken = Jwts.builder().setSubject("other").setExpiration(new Date(1893456000000L)).signWith(second).compact();
+        for (boolean expiry : new boolean[] {true, false}) {
+            assertTrue(repository.verify(first, token, expiry));
+            assertEquals("test", repository.getPlayload(first, token, expiry).getSubject());
+            assertThrows(io.jsonwebtoken.security.SignatureException.class, () -> repository.verify(second, token, expiry));
+            assertThrows(io.jsonwebtoken.security.SignatureException.class, () -> repository.getPlayload(second, token, expiry));
+            assertTrue(repository.verify(second, otherToken, expiry));
+            assertEquals("other", repository.getPlayload(second, otherToken, expiry).getSubject());
+            assertThrows(io.jsonwebtoken.security.SignatureException.class, () -> repository.verify(first, otherToken, expiry));
+            assertThrows(io.jsonwebtoken.security.SignatureException.class, () -> repository.getPlayload(first, otherToken, expiry));
+        }
     }
+    @Test
+    public void changingResolverRejectsTokensSignedWithPreviousKey() {
+        Key previous = new SecretKeySpec("previous-test-key-0123456789abcdef".getBytes(StandardCharsets.US_ASCII), "HmacSHA256");
+        Key replacement = new SecretKeySpec("replacement-test-key-0123456789ab".getBytes(StandardCharsets.US_ASCII), "HmacSHA256");
+        io.github.easy4j.jwt.token.SignedWithSecretResolverJWTRepository repository =
+                new io.github.easy4j.jwt.token.SignedWithSecretResolverJWTRepository(fixedResolver(previous));
+        repository.setClock(() -> new Date(1800000000000L));
+        String oldToken = Jwts.builder().setSubject("test").setExpiration(new Date(1893456000000L)).signWith(previous).compact();
+        assertTrue(repository.verify(oldToken, true));
+        assertTrue(repository.verify(oldToken, false));
+        repository.setSigningKeyResolver(fixedResolver(replacement));
+        assertThrows(io.jsonwebtoken.security.SignatureException.class, () -> repository.verify(oldToken, true));
+        assertThrows(io.jsonwebtoken.security.SignatureException.class, () -> repository.verify(oldToken, false));
+        assertThrows(io.jsonwebtoken.security.SignatureException.class, () -> repository.getPlayload(oldToken, true));
+        assertThrows(io.jsonwebtoken.security.SignatureException.class, () -> repository.getPlayload(oldToken, false));
+        String newToken = Jwts.builder().setSubject("test").setExpiration(new Date(1893456000000L)).signWith(replacement).compact();
+        assertTrue(repository.verify(newToken, true));
+        assertTrue(repository.verify(newToken, false));
+    }
+
+    @Test
+    public void missingKeyAndResolverKeepNullPointerExceptionContract() {
+        SignedWithSecretKeyJWTRepository direct = new SignedWithSecretKeyJWTRepository();
+        io.github.easy4j.jwt.token.SignedWithSecretResolverJWTRepository resolverRepository =
+                new io.github.easy4j.jwt.token.SignedWithSecretResolverJWTRepository();
+        for (boolean expiry : new boolean[] {true, false}) {
+            assertThrows(NullPointerException.class, () -> direct.getJwtParser(null, expiry));
+            assertThrows(NullPointerException.class, () -> resolverRepository.getJwtParser(null, expiry));
+        }
+    }
+
 }
