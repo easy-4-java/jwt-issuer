@@ -37,12 +37,17 @@ jobs:
       - name: Build and verify with JaCoCo coverage gate
         run: mvn -B --no-transfer-progress clean verify
 
+      - name: Require coverage for existing JWT tests
+        run: |
+          test -s jwt-issuer-with-jjwt/target/jacoco.exec
+          test -s jwt-issuer-with-jjwt/target/site/jacoco/jacoco.xml
+
       - name: Upload JaCoCo coverage report
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: jacoco-coverage
-          path: target/site/jacoco
+          path: "**/target/site/jacoco/**"
           retention-days: 14
 
       - name: Upload surefire reports
@@ -50,5 +55,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: surefire-reports
-          path: target/surefire-reports
+          path: "**/target/surefire-reports/**"
           retention-days: 14
