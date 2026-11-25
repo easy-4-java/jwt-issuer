@@ -1,14 +1,14 @@
 {
   "schemaVersion": "mimosa-hook-status/v1",
-  "recordedAt": "2026-09-17T13:44:14.045Z",
+  "recordedAt": "2026-09-17T13:44:49.945Z",
   "sessionId": "sess_82ad4d78-fbeb-407b-b75e-098ba78c8aa7",
   "event": "PostToolUse",
   "toolName": "Edit",
-  "file": "jwt-issuer-with-jjwt/src/main/java/io/github/hiwepy/jwt/utils/JJwtUtils.java",
-  "outcome": "clear",
-  "coverage": "complete",
+  "file": "/Users/wandl/workspaces/workspace-github-easy-4-java/spring-security-jwt/.github/workflows/ci.yml",
+  "outcome": "inconclusive",
+  "coverage": "partial",
   "findingCount": 0,
-  "durationMs": 4,
+  "durationMs": 2,
   "hostState": "hook_complete",
   "reportHint": ".mimosa/reports/"
 }
